@@ -125,11 +125,26 @@ class BrowserWorker:
         else:
             profile = Path(self.cfg.data_dir) / "browser-profile"
             profile.mkdir(parents=True, exist_ok=True)
-            kwargs = dict(user_data_dir=str(profile), headless=bool(b.get("headless", False)),
+            import os
+            import sys
+
+            headless = bool(b.get("headless", False))
+            if sys.platform.startswith("linux") and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+                headless = True  # no screen attached (e.g. a headless mini PC): watch it in the web app instead
+            kwargs = dict(user_data_dir=str(profile), headless=headless,
                           viewport={"width": 1280, "height": 900}, accept_downloads=True)
             if b.get("channel"):
                 kwargs["channel"] = b["channel"]  # e.g. "chrome" to use installed Google Chrome
-            self.context = self.pw.chromium.launch_persistent_context(**kwargs)
+            try:
+                self.context = self.pw.chromium.launch_persistent_context(**kwargs)
+            except Exception as e:  # headed launch failed (no display) -> run headless
+                if headless:
+                    raise
+                kwargs["headless"] = True
+                self.context = self.pw.chromium.launch_persistent_context(**kwargs)
+                import logging
+
+                logging.getLogger("jarvis.browser").warning("No display for the browser window; running headless (%s)", str(e)[:80])
         self.context.set_default_timeout(int(b.get("timeout_ms", 15000)))
         self.page = self.context.pages[-1] if self.context.pages else self.context.new_page()
         return self.page

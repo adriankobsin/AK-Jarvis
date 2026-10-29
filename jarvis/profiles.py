@@ -21,6 +21,8 @@ CHILD_TOOLS = {
     # kid-specific
     "save_project_file", "read_project_file", "list_project_files", "run_project",
     "flag_for_parent",
+    # show videos / pictures in the app
+    "show_on_screen",
 }
 
 

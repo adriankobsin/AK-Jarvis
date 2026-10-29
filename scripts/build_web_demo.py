@@ -28,7 +28,8 @@ def tool_groups(reg) -> dict:
 def main() -> None:
     cfg = load_config(overrides={"phone": {"enabled": True}, "email": {"smtp_host": "smtp.example.com"},
                                  "home_assistant": {"url": "http://homeassistant.local:8123"},
-                                 "assistant": {"data_dir": "/tmp/jarvis-demo-build"}})
+                                 "assistant": {"data_dir": "/tmp/jarvis-demo-build"},
+                                 "cameras": [{"name": "anchor_pocket", "snapshot_url": "http://camera.local/snap.jpg"}]})
     tools = {"owner": tool_groups(build_registry(cfg)),
              "kid": tool_groups(build_registry(profile_config(cfg, Profile("son", "Max", "child", 12))))}
     web = ROOT / "jarvis" / "web"

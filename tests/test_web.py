@@ -173,3 +173,70 @@ def test_teach_toggle_and_alerts(env):
     assert c.post("/api/teach", json={"on": False}).json()["mode"] == "normal"
     hh.alert("Reminder", "Call the yard")
     assert c.get("/api/state").json()["alerts"][-1]["text"] == "Call the yard"
+
+
+def test_live_activity_dashboard_media_vision_cameras(env, monkeypatch):
+    import base64
+
+    c, client, hh, tmp = env
+    login(c)
+    client.script += [resp([{"type": "tool_use", "id": "t1", "name": "show_on_screen",
+                             "input": {"source": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "title": "Lo-fi"}}], "tool_use"),
+                      resp([{"type": "text", "text": "It's on screen."}])]
+    events(c.post("/api/chat", json={"text": "play some lofi"}))
+    dash = c.get("/api/dashboard").json()
+    run = dash["runs"][0]
+    assert run["status"] == "done" and run["text"] == "play some lofi" and run["channel"] == "local"
+    assert run["steps"][0]["name"] == "show_on_screen" and run["steps"][0]["status"] == "done"
+    media = c.get("/api/media").json()
+    assert media[0]["kind"] == "youtube" and media[0]["title"] == "Lo-fi"
+    assert c.post("/api/media/show", json={"source": "https://x.test/a.png"}).json()["ok"]
+    assert c.get("/api/media").json()[0]["kind"] == "image"
+    v = c.get("/api/vitals").json()
+    assert 0 <= v["cpu"] <= 100 and "mem" in v
+    # files: only under home/data dir
+    f = tmp / "data" / "note.txt"
+    f.write_text("hi")
+    assert c.get("/api/files", params={"path": str(f)}).text == "hi"
+    assert c.get("/api/files", params={"path": "/etc/passwd"}).status_code == 404
+    # vision: image goes to Claude, then is stripped from history
+    client.script.append(resp([{"type": "text", "text": "A red square."}]))
+    img = base64.b64encode(b"\xff\xd8fakejpeg").decode()
+    ev = events(c.post("/api/vision", json={"image": "data:image/jpeg;base64," + img, "question": "What is this?"}))
+    assert ev[-1]["text"] == "A red square."
+    owner = hh.brain("owner")
+    first_user = [m for m in owner.history if m["role"] == "user"][-1]["content"]
+    assert first_user[0] == {"type": "text", "text": "[image shown earlier]"} and first_user[1]["text"] == "What is this?"
+    assert c.get("/api/voices").json()["voices"][0]["id"] == "en-GB-RyanNeural"
+
+
+def test_ip_camera_snapshot_and_tool(tmp_path, monkeypatch):
+    import socket
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    class Cam(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.end_headers()
+            self.wfile.write(b"\xff\xd8JPEGDATA")
+
+    srv = HTTPServer(("127.0.0.1", 0), Cam)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    monkeypatch.chdir(tmp_path)
+    cfg = load_config(overrides={"assistant": {"data_dir": str(tmp_path / "d")},
+                                 "cameras": [{"name": "anchor_pocket", "snapshot_url": f"http://127.0.0.1:{srv.server_port}/snap"}]})
+    hh = Household(cfg, start_schedulers=False, show_tools=False)
+    app = TestClient(create_app(cfg, hh, password="pw"))
+    login(app)
+    assert app.get("/api/cameras").json()[0]["name"] == "anchor_pocket"
+    r = app.get("/api/cameras/anchor_pocket/snapshot")
+    assert r.status_code == 200 and r.content == b"\xff\xd8JPEGDATA"
+    assert app.get("/api/cameras/nope/snapshot").status_code == 502
+    b = hh.brain("owner")
+    out, err = b.registry.execute("look_at_camera", {"name": "anchor_pocket"}, b.ctx)
+    assert not err and out[1]["type"] == "image" and out[1]["source"]["media_type"] == "image/jpeg"
+    srv.shutdown()

@@ -105,6 +105,7 @@ DEFAULTS: dict[str, Any] = {
         "password_env": "JARVIS_WEB_PASSWORD",   # owner login for the web UI
         "session_days": 30,
     },
+    "cameras": [],                 # IP cameras Jarvis can look at — see templates/config.yaml
     "browser": {
         "mode": "jarvis",          # jarvis = own persistent Chrome profile; cdp = attach to a running Chrome
         "headless": False,         # show the window so you can watch / take over

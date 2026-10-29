@@ -96,6 +96,16 @@ web:
   enabled: true                   # web app at http://<mini-pc>:8788 — password: JARVIS_WEB_PASSWORD in .env
   port: 8788
 
+cameras: []                      # IP cameras Jarvis can look at, e.g.:
+#  - name: anchor_pocket
+#    description: Bow anchor pocket, starboard
+#    snapshot_url: http://192.168.1.80/cgi-bin/snapshot.cgi
+#    username: admin
+#    password_env: CAM_ANCHOR_PASSWORD
+#    auth: digest
+#  - name: aft_deck
+#    ha_entity: camera.aft_deck
+
 browser:
   mode: jarvis                    # jarvis = Jarvis's own Chrome window with a saved profile (log in once)
                                   # cdp    = attach to a Chrome you started with --remote-debugging-port=9222

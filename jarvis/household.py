@@ -31,6 +31,9 @@ class Household:
         self.confirm = confirm
         self.show_tools = show_tools
         self.start_schedulers = start_schedulers
+        # Live sinks the web app plugs into: activity (what Jarvis is doing) and media (show on screen)
+        self.activity_sink: Callable[[dict], None] | None = None
+        self.media_sink: Callable[[dict], None] | None = None
 
     # ------------------------------------------------------------------
     def brain(self, pid: str) -> Brain:
@@ -49,6 +52,8 @@ class Household:
 
         b = Brain(pcfg, store, build_registry(pcfg), confirm=self.confirm, notify=notify,
                   on_tool=on_tool, kb=kb)
+        b.ctx.extras["activity"] = lambda e: self.activity_sink and self.activity_sink(e)
+        b.ctx.extras["media"] = lambda item: self._show_media(item)
         if prof.is_child:
             b.ctx.extras["parent_alert"] = lambda text, p=prof: self._parent_alert(p, text)
         self.brains[pid] = b
@@ -70,6 +75,19 @@ class Household:
         b.ctx.extras["scheduler"] = sched
         sched.start()
         self.schedulers[pid] = sched
+
+    def _show_media(self, item: dict) -> str:
+        """Put something on screen: the web app if one is open, otherwise this computer."""
+        if self.media_sink:
+            self.media_sink(item)
+            return "web"
+        if item.get("auto", True):
+            import webbrowser
+
+            src = item["source"]
+            webbrowser.open(src if "://" in src else "file://" + src)
+            return "local"
+        return "none"
 
     def _parent_alert(self, prof: Profile, text: str) -> None:
         from .emailer import email_configured, send_email

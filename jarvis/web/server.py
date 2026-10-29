@@ -15,6 +15,7 @@ import shutil
 import threading
 import time
 import uuid
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -54,6 +55,12 @@ class WebApp:
         self.pending: dict[str, dict] = {}       # approval id -> {"event", "answer"}
         self.run_locks: dict[str, threading.Lock] = {}
         self.alerts: list[dict] = []
+        self.recent: deque = deque(maxlen=300)      # activity events
+        self.runs: dict[str, dict] = {}             # run id -> live/finished run summary
+        self.media_items: deque = deque(maxlen=60)  # things shown on screen / files produced
+        self.started = time.time()
+        self.hh.activity_sink = self.activity
+        self.hh.media_sink = self.media
 
     # -- alerts ------------------------------------------------------
     def alert(self, title: str, text: str) -> None:
@@ -65,6 +72,37 @@ class WebApp:
         self.alerts = (self.alerts + [evt])[-50:]
         for q in list(self.subscribers):
             q.put(evt)
+
+    def broadcast(self, evt: dict) -> None:
+        for q in list(self.subscribers):
+            q.put(evt)
+
+    # -- live activity -------------------------------------------------
+    def activity(self, e: dict) -> None:
+        e = dict(e)
+        run = self.runs.get(e.get("run", ""))
+        if e["type"] == "run_start":
+            run = self.runs[e["run"]] = {"run": e["run"], "text": e.get("text", ""), "channel": e.get("channel"),
+                                         "profile": e.get("profile"), "started": e["ts"], "status": "running",
+                                         "steps": [], "mode": e.get("mode")}
+            for k in [k for k, v in self.runs.items() if v["status"] != "running"][:-12]:
+                self.runs.pop(k, None)  # keep the last dozen finished runs
+        elif run and e["type"] == "tool":
+            step = next((s for s in run["steps"] if e.get("step") and s.get("step") == e["step"]), None)
+            if step:
+                step.update({k: e[k] for k in ("status", "ms", "result") if k in e})
+            else:
+                run["steps"].append({k: e.get(k) for k in ("step", "name", "args", "status", "ms")})
+        elif run and e["type"] == "run_end":
+            run.update(status="done" if e.get("ok") else "error", ended=e["ts"], ms=e.get("ms"), reply=e.get("reply", ""))
+        if e["type"] != "thinking":
+            self.recent.append(e)
+        self.broadcast({"type": "activity", "event": e})
+
+    def media(self, item: dict) -> None:
+        item = {**item, "id": uuid.uuid4().hex[:8], "ts": datetime.now().isoformat(timespec="seconds")}
+        self.media_items.append(item)
+        self.broadcast({"type": "media", "item": item})
 
     # -- auth --------------------------------------------------------
     def login(self, password: str, profile: str | None = None) -> str:
@@ -95,7 +133,7 @@ class WebApp:
             raise HTTPException(403, "That's a grown-up feature.")
 
     # -- chat --------------------------------------------------------
-    def chat_stream(self, s: Session, text: str, voice: bool):
+    def chat_stream(self, s: Session, text: str, voice: bool, images: list[dict] | None = None):
         brain = self.brain(s)
         events: queue.Queue = queue.Queue()
         lock = self.run_locks.setdefault(s.profile, threading.Lock())
@@ -118,7 +156,7 @@ class WebApp:
                 old_tool, old_confirm = brain.on_tool, brain.ctx.confirm
                 brain.on_tool, brain.ctx.confirm = on_tool, confirm
                 try:
-                    reply = brain.run(text, voice=voice)
+                    reply = brain.run(text, voice=voice, images=images)
                     events.put({"type": "reply", "text": reply, "mode": brain.mode})
                 except Exception as e:  # noqa: BLE001
                     events.put({"type": "error", "text": f"{type(e).__name__}: {e}"})
@@ -182,6 +220,37 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
     @app.get("/icon.svg")
     def icon():
         return FileResponse(STATIC / "icon.svg", media_type="image/svg+xml")
+
+    def broadcast(self, evt: dict) -> None:
+        for q in list(self.subscribers):
+            q.put(evt)
+
+    # -- live activity -------------------------------------------------
+    def activity(self, e: dict) -> None:
+        e = dict(e)
+        run = self.runs.get(e.get("run", ""))
+        if e["type"] == "run_start":
+            run = self.runs[e["run"]] = {"run": e["run"], "text": e.get("text", ""), "channel": e.get("channel"),
+                                         "profile": e.get("profile"), "started": e["ts"], "status": "running",
+                                         "steps": [], "mode": e.get("mode")}
+            for k in [k for k, v in self.runs.items() if v["status"] != "running"][:-12]:
+                self.runs.pop(k, None)  # keep the last dozen finished runs
+        elif run and e["type"] == "tool":
+            step = next((s for s in run["steps"] if e.get("step") and s.get("step") == e["step"]), None)
+            if step:
+                step.update({k: e[k] for k in ("status", "ms", "result") if k in e})
+            else:
+                run["steps"].append({k: e.get(k) for k in ("step", "name", "args", "status", "ms")})
+        elif run and e["type"] == "run_end":
+            run.update(status="done" if e.get("ok") else "error", ended=e["ts"], ms=e.get("ms"), reply=e.get("reply", ""))
+        if e["type"] != "thinking":
+            self.recent.append(e)
+        self.broadcast({"type": "activity", "event": e})
+
+    def media(self, item: dict) -> None:
+        item = {**item, "id": uuid.uuid4().hex[:8], "ts": datetime.now().isoformat(timespec="seconds")}
+        self.media_items.append(item)
+        self.broadcast({"type": "media", "item": item})
 
     # -- auth --------------------------------------------------------
     @app.post("/api/login")
@@ -496,6 +565,188 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
         _, md = backup(b.store, b.kb, folder, int(cfg["backup"].get("keep", 14)))
         return FileResponse(md, filename=md.name, media_type="text/markdown")
 
+    # -- dashboard / live status ---------------------------------------
+    @app.get("/api/dashboard")
+    def dashboard(s: Session = Depends(auth)):
+        b = web.brain(s)
+        st = b.store
+        sched = b.ctx.extras.get("scheduler")
+        autos = []
+        for a in st.list_automations() if not web.is_child(s) else []:
+            nxt = None
+            if sched:
+                job = sched.sched.get_job(f"auto-{a['id']}")
+                nxt = job.next_run_time.isoformat() if job and job.next_run_time else None
+            autos.append({"id": a["id"], "name": a["name"], "schedule": a["schedule"], "next_run": nxt,
+                          "last_run": a["last_run"]})
+        runs = sorted(web.runs.values(), key=lambda r: r["started"], reverse=True)
+        if web.is_child(s):
+            runs = [r for r in runs if r.get("profile") == s.profile]
+        return {
+            "runs": runs[:12],
+            "tasks": _rows(st.list_tasks()[:10], ("id", "title", "due", "priority")),
+            "reminders": _rows(st.list_reminders()[:8], ("id", "text", "due_at", "recurrence", "channel")),
+            "automations": sorted(autos, key=lambda a: a["next_run"] or "9")[:6],
+            "media": list(web.media_items)[-12:],
+            "browser_active": _browser_active(web),
+            "cameras": [] if web.is_child(s) else __import__("jarvis.cameras", fromlist=["x"]).list_cameras(cfg),
+        }
+
+    @app.get("/api/vitals")
+    def vitals(s: Session = Depends(auth)):
+        out: dict[str, Any] = {"jarvis_uptime_s": int(time.time() - web.started),
+                               "active_runs": sum(1 for r in web.runs.values() if r["status"] == "running")}
+        try:
+            import psutil
+
+            vm, du = psutil.virtual_memory(), psutil.disk_usage("/")
+            out.update(cpu=psutil.cpu_percent(interval=None), mem=vm.percent, disk=du.percent,
+                       mem_total_gb=round(vm.total / 2**30, 1), disk_free_gb=round(du.free / 2**30, 1),
+                       host_uptime_s=int(time.time() - psutil.boot_time()))
+            bat = psutil.sensors_battery() if hasattr(psutil, "sensors_battery") else None
+            if bat:
+                out["battery"] = {"percent": round(bat.percent), "plugged": bool(bat.power_plugged)}
+            try:
+                out["load"] = [round(x, 2) for x in os.getloadavg()]
+            except (AttributeError, OSError):
+                pass
+        except ImportError:
+            pass
+        return out
+
+    # -- media ---------------------------------------------------------
+    @app.get("/api/media")
+    def media_list(s: Session = Depends(auth)):
+        return list(reversed(web.media_items))
+
+    @app.post("/api/media/show")
+    def media_show(body: dict, s: Session = Depends(auth)):
+        from ..tools.media import guess_kind
+
+        src = str(body.get("source", "")).strip()
+        if not src:
+            raise HTTPException(400, "Nothing to show.")
+        web.media({"source": src, "title": body.get("title") or src, "kind": body.get("kind") or guess_kind(src), "auto": True})
+        return {"ok": True}
+
+    @app.get("/api/files")
+    def files(path: str, s: Session = Depends(auth)):
+        web.owner_only(s)
+        p = Path(path).expanduser().resolve()
+        allowed = [Path.home().resolve(), Path(cfg.data_dir).resolve()]
+        if not any(p == a or a in p.parents for a in allowed) or not p.is_file():
+            raise HTTPException(404, "File not available.")
+        return FileResponse(p)
+
+    # -- browser live view ---------------------------------------------
+    def browser_worker():
+        from ..tools.browser import worker_for
+
+        return worker_for(web.hh.brain("owner").config)
+
+    @app.get("/api/browser/state")
+    def browser_state(s: Session = Depends(auth)):
+        web.owner_only(s)
+        wk = browser_worker()
+        if wk.context is None:
+            return {"open": False}
+
+        def st():
+            page = wk.ensure()
+            return {"open": True, "url": page.url, "title": page.title(),
+                    "tabs": [{"i": i, "title": p.title(), "url": p.url} for i, p in enumerate(wk.context.pages)],
+                    "viewport": page.viewport_size}
+        return wk.call(st)
+
+    @app.get("/api/browser/screenshot")
+    def browser_screenshot(s: Session = Depends(auth)):
+        web.owner_only(s)
+        wk = browser_worker()
+        if wk.context is None:
+            return Response(status_code=204)
+        png = wk.call(lambda: wk.ensure().screenshot(type="jpeg", quality=55))
+        return Response(png, media_type="image/jpeg", headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/browser/action")
+    def browser_action(body: dict, s: Session = Depends(auth)):
+        web.owner_only(s)
+        wk = browser_worker()
+        act = body.get("action")
+
+        def do():
+            page = wk.ensure()
+            if act == "open":
+                url = str(body.get("url", "")).strip()
+                if url and "://" not in url:
+                    url = ("https://" + url) if "." in url and " " not in url else "https://www.google.com/search?q=" + requests_quote(url)
+                page.goto(url or "about:blank", wait_until="domcontentloaded")
+            elif act == "click":
+                vp = page.viewport_size or {"width": 1280, "height": 900}
+                page.mouse.click(float(body["fx"]) * vp["width"], float(body["fy"]) * vp["height"])
+            elif act == "type":
+                page.keyboard.type(str(body.get("text", "")))
+            elif act == "key":
+                page.keyboard.press(str(body.get("key", "Enter")))
+            elif act == "scroll":
+                page.mouse.wheel(0, float(body.get("dy", 600)))
+            elif act in ("back", "forward", "reload"):
+                getattr(page, {"back": "go_back", "forward": "go_forward", "reload": "reload"}[act])()
+            elif act == "tab":
+                wk.page = wk.context.pages[int(body.get("index", 0))]
+                wk.page.bring_to_front()
+            page.wait_for_timeout(350)
+            return {"url": wk.page.url, "title": wk.page.title()}
+
+        try:
+            return wk.call(do, timeout=45)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(400, f"Browser: {e}") from e
+
+    # -- cameras & vision ---------------------------------------------
+    @app.get("/api/cameras")
+    def cameras(s: Session = Depends(auth)):
+        from ..cameras import list_cameras
+
+        web.owner_only(s)
+        return list_cameras(cfg)
+
+    @app.get("/api/cameras/{name}/snapshot")
+    def camera_snapshot(name: str, s: Session = Depends(auth)):
+        from ..cameras import snapshot
+
+        web.owner_only(s)
+        try:
+            data, ctype = snapshot(cfg, name)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(502, f"Camera {name}: {e}") from e
+        return Response(data, media_type=ctype, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/vision")
+    def vision(body: dict, s: Session = Depends(auth)):
+        """A frame from the browser's camera plus a question — Jarvis looks and answers."""
+        import base64 as b64
+
+        img = str(body.get("image", ""))
+        media_type = "image/jpeg"
+        if img.startswith("data:"):
+            head, img = img.split(",", 1)
+            media_type = head[5:].split(";")[0] or media_type
+        try:
+            raw = b64.b64decode(img, validate=True)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(400, "Bad image.") from e
+        if len(raw) > 5 * 2**20:
+            raise HTTPException(413, "Image too large (max 5 MB).")
+        question = str(body.get("question") or "What do you see?").strip()
+        return StreamingResponse(web.chat_stream(s, question, bool(body.get("voice")),
+                                                 images=[{"media_type": media_type, "data": img}]),
+                                 media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/api/voices")
+    def voices(s: Session = Depends(auth)):
+        return {"default": cfg["voice"].get("edge_voice", "en-GB-RyanNeural"), "server_tts": _has("edge_tts"),
+                "voices": VOICES}
+
     # -- voice ---------------------------------------------------------
     @app.post("/api/transcribe")
     async def transcribe(audio: UploadFile = File(...), s: Session = Depends(auth)):
@@ -514,7 +765,7 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
             os.unlink(tmp.name)
 
     @app.get("/api/tts")
-    def tts(text: str, s: Session = Depends(auth)):
+    def tts(text: str, s: Session = Depends(auth), voice: str = ""):
         if not _has("edge_tts"):
             raise HTTPException(501, "Server voice isn't installed.")
         import asyncio
@@ -524,12 +775,40 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
 
         fd, path = tempfile.mkstemp(suffix=".mp3")
         os.close(fd)
-        asyncio.run(edge_tts.Communicate(text[:3000], cfg["voice"].get("edge_voice", "en-GB-RyanNeural")).save(path))
+        chosen = voice if voice in {v["id"] for v in VOICES} else cfg["voice"].get("edge_voice", "en-GB-RyanNeural")
+        asyncio.run(edge_tts.Communicate(text[:3000], chosen).save(path))
         data = Path(path).read_bytes()
         os.unlink(path)
         return Response(data, media_type="audio/mpeg")
 
     return app
+
+
+VOICES = [
+    {"id": "en-GB-RyanNeural", "label": "Ryan (British, calm)"},
+    {"id": "en-GB-ThomasNeural", "label": "Thomas (British, warm)"},
+    {"id": "en-GB-SoniaNeural", "label": "Sonia (British)"},
+    {"id": "en-US-GuyNeural", "label": "Guy (American)"},
+    {"id": "en-US-AndrewNeural", "label": "Andrew (American, natural)"},
+    {"id": "en-AU-WilliamNeural", "label": "William (Australian)"},
+    {"id": "en-IE-ConnorNeural", "label": "Connor (Irish)"},
+    {"id": "en-SG-WayneNeural", "label": "Wayne (Singaporean)"},
+]
+
+
+def requests_quote(text: str) -> str:
+    from urllib.parse import quote_plus
+
+    return quote_plus(text)
+
+
+def _browser_active(web) -> bool:
+    try:
+        from ..tools.browser import _workers
+
+        return any(w.context is not None for w in _workers.values())
+    except Exception:
+        return False
 
 
 _whisper_model: Any = None

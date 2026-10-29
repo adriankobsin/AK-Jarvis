@@ -179,6 +179,7 @@ class JarvisScheduler:
         with self._run_lock:
             log.info("Running automation %s", a["name"])
             session = self.brain.fork()
+            session.channel = "automation"
             prompt = (f"[Scheduled automation '{a['name']}' — the user is not necessarily at the "
                       f"computer. Carry it out, then report the outcome briefly.]\n{a['prompt']}")
             reply = session.run(prompt, voice=True)

@@ -49,6 +49,15 @@ def replace_in_paragraph(p, old: str, new: str) -> int:
     return count
 
 
+def _record(ctx, path) -> None:
+    sink = ctx.extras.get("media")
+    if sink:
+        try:
+            sink({"source": str(Path(path).resolve()), "title": Path(path).name, "kind": "file", "auto": False})
+        except Exception:
+            pass
+
+
 def register(reg, config) -> None:
     @reg.tool(
         "read_document",
@@ -93,6 +102,7 @@ def register(reg, config) -> None:
         out.parent.mkdir(parents=True, exist_ok=True)
         doc.save(str(out))
         missing = [k for k, v in counts.items() if v == 0]
+        _record(ctx, out)
         return {"saved": str(out), "replaced": {k: v for k, v in counts.items() if v},
                 "not_found": missing}
 
@@ -130,6 +140,7 @@ def register(reg, config) -> None:
             out = out.with_suffix(".docx")
         out.parent.mkdir(parents=True, exist_ok=True)
         doc.save(str(out))
+        _record(ctx, out)
         return f"Created {out}"
 
     @reg.tool(
@@ -206,6 +217,7 @@ def register(reg, config) -> None:
         out.parent.mkdir(parents=True, exist_ok=True)
         with open(out, "wb") as fh:
             writer.write(fh)
+        _record(ctx, out)
         return {"saved": str(out), "filled": list(resolved), "unknown_fields": unknown}
 
     @reg.tool(
@@ -232,4 +244,5 @@ def register(reg, config) -> None:
         out = _out_path(src, output_path)
         out.parent.mkdir(parents=True, exist_ok=True)
         wb.save(str(out))
+        _record(ctx, out)
         return {"saved": str(out), "cells_written": written}

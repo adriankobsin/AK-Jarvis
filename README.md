@@ -19,7 +19,7 @@ on your computer, your smart home and your AV equipment.
 | 👦 **Family** | A separate tutor profile for your son: school help that teaches rather than hands out answers, game development, music and YouTube coaching, kid-safe rules, his own memory, and a weekly report to you |
 | 🌐 **Browser** | Runs his own Chrome window that you can watch: opens sites, reads pages, fills in online forms and applications, uploads files, takes screenshots. Asks your approval before anything is submitted, paid or sent |
 | 📄 **Documents** | Fills in Word templates (placeholders, blanks, tables, headers), PDF forms and Excel sheets, and drafts new Word documents. The original file is never overwritten |
-| 🖥️ **Web app** | Open Jarvis in any browser, including your phone. Chat, voice, a live view of the tools he's using, approve/decline pop-ups, and pages to manage memory, knowledge, procedures, tasks, reminders, automations, phone and family. A "How it's built" page shows the architecture |
+| 🖥️ **Web app** | A futuristic control centre in any browser, including your phone. The animated core reacts to his voice. A live operations panel shows each step of every task he's running (from chat, voice, phone or automations), alongside a mission queue, system vitals and status lights. You get a live view of his browser that you can drive, a media player, your phone or laptop camera and IP cameras he can look at, and a real voice with hands-free conversation mode and a "Jarvis" wake word |
 | 💻 **Computer** | Open apps and URLs, run shell commands (only after you confirm), set volume, check system status, show notifications |
 
 ---
@@ -132,7 +132,11 @@ like an app.
 
 | Page | What you can do there |
 |---|---|
-| **Chat** | Type or tap the mic. You see each tool as Jarvis uses it ("Searching your knowledge", "Filling in a form"…). Approve or decline actions like submitting a form or running a command. Turn on teach mode, or have replies read aloud |
+| **Core** | The reactor: tap it to talk, tap again to stop or interrupt. Replies are spoken in a neural voice (choose it under Voice & settings). Toggles for Voice, Conversation (hands-free back-and-forth), Wake word ("Jarvis, …") and Teach. Each step shows as Jarvis works. Approvals pop up with a red-alert core |
+| **Operations** | Live runs with step-by-step progress and timings, the mission queue (tasks, reminders with countdowns, upcoming automations), CPU, memory and disk gauges with a CPU history line, status lights, and browser and camera feeds |
+| **Browser** | A live view of Jarvis's browser. Type an address, click on the page, type, scroll, go back. A "Jarvis is driving" badge shows when he's using it. On a mini PC without a screen, the browser runs in the background and you watch it here |
+| **Media** | Anything Jarvis puts on screen ("play…", "show me…"), such as YouTube, video, audio, images, PDFs and camera stills, plus the documents he creates |
+| **Camera** | Point your phone or laptop camera at something (or upload a photo) and ask Jarvis about it. View your IP cameras and ask him to check one |
 | **Memory** | Search, add, edit or remove facts. Instructions and corrections are listed first because they're always applied |
 | **Knowledge** | Upload documents, write notes, add web pages, search everything Jarvis knows and read any source |
 | **Procedures** | View and edit the step-by-step ways you do things |
@@ -141,6 +145,21 @@ like an app.
 | **Phone** | Messages taken from unknown callers, and a "Call my phone now" button |
 | **Family** | Switch to your son's tutor profile. Switching back needs the PIN |
 | **How it's built** | The architecture, every tool grouped by area, integration status, and a download of everything Jarvis knows |
+
+**IP cameras** (for example the anchor-pocket camera) go in the config:
+```yaml
+cameras:
+  - name: anchor_pocket
+    description: Bow anchor pocket, starboard
+    snapshot_url: http://192.168.1.80/cgi-bin/snapshot.cgi
+    username: admin
+    password_env: CAM_ANCHOR_PASSWORD   # in .env
+    auth: digest                        # or basic
+  - name: aft_deck
+    ha_entity: camera.aft_deck          # or any Home Assistant camera
+```
+Jarvis gets `look_at_camera` and can answer questions like "Is the anchor secure?" by looking at a live snapshot.
+The browser camera and microphone need HTTPS or `localhost`. Through the Cloudflare Tunnel you get HTTPS automatically.
 
 To try it without a server, run `python scripts/build_web_demo.py`. It builds
 `dist/jarvis-web-demo.html`, the same interface running on sample data.
@@ -360,7 +379,7 @@ jarvis/
                     · browser (Playwright) · documents (Word/PDF/Excel)
   voice/            audio.py (mic, VAD, Whisper, wake word) · tts.py · loop.py
   templates/        default config.yaml and .env
-tests/              53 tests (Claude, audio, devices and Vapi mocked; phone gateway over real HTTP;
+tests/              55 tests (Claude, audio, devices and Vapi mocked; phone gateway over real HTTP;
                     browser tested in real headless Chromium; real Word/PDF/Excel files)
 ```
 

@@ -6,6 +6,8 @@ import logging
 import platform
 import re
 import threading
+import time
+import uuid
 from datetime import datetime
 from typing import Any, Callable
 
@@ -299,12 +301,46 @@ class Brain:
                           "max_uses": int(m.get("web_search_max_uses", 5))})
         return tools
 
+    @staticmethod
+    def _is_turn_start(msg: dict) -> bool:
+        if msg["role"] != "user":
+            return False
+        c = msg["content"]
+        if isinstance(c, str):
+            return True
+        return isinstance(c, list) and not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in c)
+
     def _trim_history(self) -> None:
         keep = int(self.config["model"].get("history_turns", 20))
-        starts = [i for i, msg in enumerate(self.history)
-                  if msg["role"] == "user" and isinstance(msg["content"], str)]
+        starts = [i for i, msg in enumerate(self.history) if self._is_turn_start(msg)]
         if len(starts) > keep:
             self.history = self.history[starts[-keep]:]
+
+    def _strip_images(self) -> None:
+        """Images (camera frames, screenshots) are only needed for the turn they were sent in."""
+        def clean(blocks):
+            out = []
+            for b in blocks:
+                if isinstance(b, dict) and b.get("type") == "image":
+                    out.append({"type": "text", "text": "[image shown earlier]"})
+                elif isinstance(b, dict) and b.get("type") == "tool_result" and isinstance(b.get("content"), list):
+                    out.append({**b, "content": clean(b["content"])})
+                else:
+                    out.append(b)
+            return out
+
+        for msg in self.history:
+            if msg["role"] == "user" and isinstance(msg["content"], list):
+                msg["content"] = clean(msg["content"])
+
+    def _emit(self, **event) -> None:
+        sink = self.ctx.extras.get("activity")
+        if sink:
+            try:
+                sink({"channel": self.channel, "profile": (self.config.get("profile") or {}).get("id", "owner"),
+                      "ts": time.time(), **event})
+            except Exception:  # never let the UI break the brain
+                log.debug("activity sink failed", exc_info=True)
 
     def _create(self, system: str):
         m = self.config["model"]
@@ -324,20 +360,35 @@ class Brain:
             raise
 
     # ------------------------------------------------------------------
-    def run(self, user_text: str, voice: bool = False) -> str:
-        """Process one user turn to completion and return the reply text."""
+    def run(self, user_text: str, voice: bool = False, images: list[dict] | None = None) -> str:
+        """Process one user turn to completion and return the reply text.
+        images: optional [{"media_type": "image/jpeg", "data": <base64>}] sent along with the text."""
         with self._lock:
+            run_id = uuid.uuid4().hex[:10]
+            t0 = time.time()
             checkpoint = len(self.history)
-            self.history.append({"role": "user", "content": user_text})
-            self.store.log("user", user_text)
+            if images:
+                content: Any = [{"type": "image", "source": {"type": "base64", "media_type": im.get("media_type", "image/jpeg"),
+                                                              "data": im["data"]}} for im in images]
+                content.append({"type": "text", "text": user_text})
+            else:
+                content = user_text
+            self.history.append({"role": "user", "content": content})
+            self.store.log("user", user_text + (" [with image]" if images else ""))
+            self._emit(type="run_start", run=run_id, text=user_text[:240], mode=self.mode)
             system = self.system_prompt(voice, user_text)
             max_rounds = int(self.config["model"].get("max_tool_rounds", 12))
             texts: list[str] = []
             try:
                 for _ in range(max_rounds):
+                    self._emit(type="thinking", run=run_id)
                     resp = self._create(system)
                     content = [to_dict(b) for b in resp.content]
                     self.history.append({"role": "assistant", "content": content})
+                    for b in content:  # server-side tools (web search) already ran
+                        if b.get("type") == "server_tool_use":
+                            self._emit(type="tool", run=run_id, name=b.get("name", "web_search"),
+                                       args=_short_args(b.get("input", {})), status="done", ms=0)
                     round_text = "".join(b.get("text", "") for b in content if b.get("type") == "text")
                     # In voice mode, skip short "let me check…" preambles before tool calls.
                     preamble = resp.stop_reason in ("tool_use", "pause_turn") and len(round_text.strip()) < 80
@@ -349,8 +400,15 @@ class Brain:
                         for b in content:
                             if b.get("type") != "tool_use":
                                 continue
-                            self.on_tool(b["name"], b.get("input", {}))
-                            out, is_err = self.registry.execute(b["name"], b.get("input", {}), self.ctx)
+                            args = b.get("input", {})
+                            self.on_tool(b["name"], args)
+                            self._emit(type="tool", run=run_id, step=b["id"], name=b["name"],
+                                       args=_short_args(args), status="running")
+                            ts = time.time()
+                            out, is_err = self.registry.execute(b["name"], args, self.ctx)
+                            self._emit(type="tool", run=run_id, step=b["id"], name=b["name"],
+                                       status="error" if is_err else "done", ms=int((time.time() - ts) * 1000),
+                                       result=(out if isinstance(out, str) else "[rich content]")[:160])
                             log.info("tool %s -> %s", b["name"], str(out)[:200])
                             r = {"type": "tool_result", "tool_use_id": b["id"], "content": out}
                             if is_err:
@@ -366,16 +424,30 @@ class Brain:
             except Exception as e:
                 del self.history[checkpoint:]
                 log.exception("Claude request failed")
-                return f"I ran into a problem reaching my reasoning engine: {type(e).__name__}: {e}"
+                msg = f"I ran into a problem reaching my reasoning engine: {type(e).__name__}: {e}"
+                self._emit(type="run_end", run=run_id, ok=False, reply=msg[:300], ms=int((time.time() - t0) * 1000))
+                return msg
 
             # Ensure history ends cleanly on an assistant turn.
             if self.history and self.history[-1]["role"] == "user":
                 self.history.append({"role": "assistant", "content": [{"type": "text", "text": "(stopped)"}]})
+            self._strip_images()
             self._trim_history()
             reply = ("\n\n" if not voice else " ").join(texts)
             reply = reply or "Done."
             self.store.log("assistant", reply)
+            self._emit(type="run_end", run=run_id, ok=True, reply=reply[:300], ms=int((time.time() - t0) * 1000))
             return speakable(reply) if voice else reply
+
+
+def _short_args(args: dict) -> dict:
+    out = {}
+    for k, v in (args or {}).items():
+        sv = v if isinstance(v, (int, float, bool)) or v is None else str(v)
+        if isinstance(sv, str) and len(sv) > 120:
+            sv = sv[:120] + "…"
+        out[k] = sv
+    return out
 
 
 def describe_tool_call(name: str, args: dict) -> str:
