@@ -70,6 +70,18 @@ class LutronDriver(Driver):
         for attempt in (1, 2):
             try:
                 self._connect()
+                # drop anything left over (a trailing prompt from the last reply, monitoring chatter)
+                # so the next prompt we see really acknowledges *this* command
+                self.sock.settimeout(0)
+                try:
+                    while True:
+                        chunk = self.sock.recv(4096)
+                        if not chunk:
+                            raise IntegrationError("Lutron: connection closed")
+                except (BlockingIOError, socket.timeout):
+                    pass
+                self.buf = b""
+                self.sock.settimeout(float(self.cfg.get("timeout", 5)))
                 self.sock.sendall(line.encode() + b"\r\n")
                 if not expect:
                     try:  # wait for the prompt so commands are applied in order

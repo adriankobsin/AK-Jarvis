@@ -41,6 +41,9 @@ DEFAULTS: dict[str, Any] = {
         "stt_device": "auto",
         "tts": "edge",
         "edge_voice": "en-GB-RyanNeural",
+        "elevenlabs_voice_id": "onwK4e9ZLuTAKqWW03F9",   # Daniel (British). George: JBFqnCBsd6RMkjVDRZzb
+        "elevenlabs_model": "eleven_flash_v2_5",
+        "elevenlabs_key_env": "ELEVENLABS_API_KEY",
         "system_voice": "Daniel",
         "follow_up_seconds": 6,
         "silence_seconds": 1.2,

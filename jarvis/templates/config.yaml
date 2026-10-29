@@ -36,7 +36,9 @@ voice:
   wake_threshold: 0.5             # raise (0.6-0.7) if it triggers falsely
   stt_model: base.en              # tiny.en (fastest) | base.en | small.en (most accurate)
   stt_device: auto                # auto | cpu | cuda
-  tts: edge                       # edge (natural, online) | system (offline) | none
+  tts: edge                       # edge (free, natural) | elevenlabs (premium, ELEVENLABS_API_KEY in .env) | system (offline) | none
+  elevenlabs_voice_id: onwK4e9ZLuTAKqWW03F9   # Daniel, British. George (warm British): JBFqnCBsd6RMkjVDRZzb
+  elevenlabs_model: eleven_flash_v2_5
   edge_voice: en-GB-RyanNeural    # try en-GB-ThomasNeural, en-US-GuyNeural, en-AU-WilliamNeural
   system_voice: Daniel            # macOS `say` voice for offline mode
   follow_up_seconds: 6            # keep listening after a reply without the wake word

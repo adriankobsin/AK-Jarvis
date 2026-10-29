@@ -19,6 +19,7 @@ on your computer, your smart home and your AV equipment.
 | 👦 **Family** | A separate tutor profile for your son: school help that teaches rather than hands out answers, game development, music and YouTube coaching, kid-safe rules, his own memory, and a weekly report to you |
 | 🌐 **Browser** | Runs his own Chrome window that you can watch: opens sites, reads pages, fills in online forms and applications, uploads files, takes screenshots. Asks your approval before anything is submitted, paid or sent |
 | 📄 **Documents** | Fills in Word templates (placeholders, blanks, tables, headers), PDF forms and Excel sheets, and drafts new Word documents. The original file is never overwritten |
+| 🧿 **Holographic core** | The main screen is just Jarvis: an Iron Man–style 3D holographic core. You talk, he acts. While he works, the steps fly out beside the core; the answer is spoken, and any detail (tables, numbers, media, approvals) appears in a holographic panel, then fades. No menus |
 | 🖥️ **Web app** | A futuristic control centre in any browser, including your phone. The animated core reacts to his voice. A live operations panel shows each step of every task he's running (from chat, voice, phone or automations), alongside a mission queue, system vitals and status lights. You get a live view of his browser that you can drive, a media player, your phone or laptop camera and IP cameras he can look at, and a real voice with hands-free conversation mode and a "Jarvis" wake word |
 | 🏗️ **Integrations** | Crestron (Crestron Home REST API, or TCP strings to your own SIMPL/C# programs), Lutron (RadioRA 2, HomeWorks QS, Quantum), Modbus TCP/RTU (PLCs, generators, meters, HVAC), any REST API and any ASCII/TCP device. Live values, control, scenes and discovery, from chat or the Integrations page |
 | ⌘ **Programs** | Jarvis writes, tests and deploys his own control programs (watch alarms, react to sensors, sync systems, log data). They run continuously or on a schedule, are supervised and restarted if they crash, and are never deployed without your approval |
@@ -127,6 +128,26 @@ JARVIS_WEB_PASSWORD=choose-a-long-password
 
 jarvis web          # → http://localhost:8788, or http://<mini-pc-ip>:8788 from your phone on the same network
 ```
+Opening it shows **the core**: one screen, nothing else on it. Tap *Initialise*, and Jarvis greets you.
+
+- **Talk:** say "Jarvis, …", tap the core, or press Space. After he answers he keeps listening for a follow-up, so you can just carry on talking.
+- **Type:** just start typing anywhere.
+- While he works, each step (searching, reading the PLC, filling the form…) flies out beside the core and fades when done. The core turns gold while he's thinking.
+- He speaks the short answer. Anything worth seeing (a table, the working, a document, a camera still, a video) appears in a holographic panel beside him and fades after a while. Asking something new clears it.
+- When he needs your approval, the core goes amber and he asks out loud. Say "yes" or "no", or tap Approve / Decline.
+- Alerts (reminders, program alarms, phone messages) are spoken and stack as amber panels.
+- Corner buttons: keyboard, voice on/off, and the **control centre** (`/console`) for everything else.
+
+**His voice.** By default he uses the free Microsoft "Ryan" British voice. For a more natural voice, use ElevenLabs:
+```yaml
+voice:
+  tts: elevenlabs
+  elevenlabs_voice_id: onwK4e9ZLuTAKqWW03F9   # Daniel (British). George: JBFqnCBsd6RMkjVDRZzb
+```
+and put `ELEVENLABS_API_KEY=...` in `~/.jarvis/.env`. It's used by the core, the control centre and `jarvis voice`. If ElevenLabs fails, he falls back to Ryan automatically.
+
+### The control centre (`/console`)
+
 `jarvis server` starts the web app automatically. To use it away from home, add a second
 hostname to the Cloudflare Tunnel (for example `app.<your-domain>` → `localhost:8788`). The
 password login protects it. You can also add it to your phone's home screen, where it opens
@@ -134,7 +155,7 @@ like an app.
 
 | Page | What you can do there |
 |---|---|
-| **Core** | The reactor: tap it to talk, tap again to stop or interrupt. Replies are spoken in a neural voice (choose it under Voice & settings). Toggles for Voice, Conversation (hands-free back-and-forth), Wake word ("Jarvis, …") and Teach. Each step shows as Jarvis works. Approvals pop up with a red-alert core |
+| **Core** | The reactor (the console version of the main screen): tap it to talk, tap again to stop or interrupt. Replies are spoken in a neural voice (choose it under Voice & settings). Toggles for Voice, Conversation (hands-free back-and-forth), Wake word ("Jarvis, …") and Teach. Each step shows as Jarvis works. Approvals pop up with a red-alert core |
 | **Operations** | Live runs with step-by-step progress and timings, the mission queue (tasks, reminders with countdowns, upcoming automations), CPU, memory and disk gauges with a CPU history line, status lights, and browser and camera feeds |
 | **Browser** | A live view of Jarvis's browser. Type an address, click on the page, type, scroll, go back. A "Jarvis is driving" badge shows when he's using it. On a mini PC without a screen, the browser runs in the background and you watch it here |
 | **Media** | Anything Jarvis puts on screen ("play…", "show me…"), such as YouTube, video, audio, images, PDFs and camera stills, plus the documents he creates |
@@ -169,7 +190,7 @@ Jarvis gets `look_at_camera` and can answer questions like "Is the anchor secure
 The browser camera and microphone need HTTPS or `localhost`. Through the Cloudflare Tunnel you get HTTPS automatically.
 
 To try it without a server, run `python scripts/build_web_demo.py`. It builds
-`dist/jarvis-web-demo.html`, the same interface running on sample data.
+`dist/jarvis-core-demo.html` (the core) and `dist/jarvis-web-demo.html` (the control centre), running on sample data.
 
 ---
 

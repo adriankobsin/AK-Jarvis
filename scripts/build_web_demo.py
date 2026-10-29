@@ -45,6 +45,16 @@ def main() -> None:
     out.write_text(html)
     print(out)
 
+    # the holographic core (main screen); its console button opens the control-centre demo
+    core = (web / "static" / "core.html").read_text()
+    core = core.replace('<link rel="manifest" href="/manifest.webmanifest">\n', "")
+    core = core.replace('href="/icon.svg"', f'href="{icon}"')
+    core = core.replace('<script type="module">',
+                        f'<script>\n{demo}\nwindow.JARVIS_DEMO.consoleHref = "console.html";\n</script>\n<script type="module">', 1)
+    out = ROOT / "dist" / "jarvis-core-demo.html"
+    out.write_text(core)
+    print(out)
+
 
 if __name__ == "__main__":
     main()

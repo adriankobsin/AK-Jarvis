@@ -129,6 +129,12 @@ Current local time: {now} ({weekday}).
 {kb_summary}
 {recalled}"""
 
+CORE_RULES = """- HOLOGRAPHIC CORE: the user is talking to you through the Jarvis core screen. Your first
+  paragraph is SPOKEN aloud, so open with one or two short, natural sentences that answer or
+  confirm what you did (no markdown in that paragraph). Only if useful, add details after a blank
+  line (tables, lists, numbers, code); those are shown on screen as a panel, not read aloud.
+  Act first, talk briefly. Don't describe the interface."""
+
 PHONE_RULES = """- PHONE CALL: you are talking on the phone. Keep replies to 1-3 short spoken sentences.
   You cannot get on-screen confirmation, so commands needing confirmation will be declined —
   offer to do them when the user is back at the computer."""
@@ -230,6 +236,8 @@ class Brain:
         mode_rules = VOICE_RULES if voice else TEXT_RULES
         if self.channel == "phone":
             mode_rules += "\n" + PHONE_RULES
+        if self.channel == "core":
+            mode_rules = CORE_RULES
         if self.mode == "teach":
             mode_rules += TEACH_RULES.format(user=user)
         return PERSONA.format(
@@ -258,6 +266,8 @@ class Brain:
         mode_rules = VOICE_RULES if voice else TEXT_RULES
         if self.channel == "phone":
             mode_rules += "\n" + PHONE_RULES
+        if self.channel == "core":
+            mode_rules = CORE_RULES
         return KID_PERSONA.format(
             name=self.config["assistant"].get("name", "Jarvis"),
             kid=p["name"], age=p.get("age") or "about 12",

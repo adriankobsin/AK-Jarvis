@@ -133,7 +133,7 @@ class WebApp:
             raise HTTPException(403, "That's a grown-up feature.")
 
     # -- chat --------------------------------------------------------
-    def chat_stream(self, s: Session, text: str, voice: bool, images: list[dict] | None = None):
+    def chat_stream(self, s: Session, text: str, voice: bool, images: list[dict] | None = None, style: str = ""):
         brain = self.brain(s)
         events: queue.Queue = queue.Queue()
         lock = self.run_locks.setdefault(s.profile, threading.Lock())
@@ -153,15 +153,17 @@ class WebApp:
 
         def work():
             with lock:
-                old_tool, old_confirm = brain.on_tool, brain.ctx.confirm
+                old_tool, old_confirm, old_channel = brain.on_tool, brain.ctx.confirm, brain.channel
                 brain.on_tool, brain.ctx.confirm = on_tool, confirm
+                if style == "core":
+                    brain.channel = "core"
                 try:
                     reply = brain.run(text, voice=voice, images=images)
                     events.put({"type": "reply", "text": reply, "mode": brain.mode})
                 except Exception as e:  # noqa: BLE001
                     events.put({"type": "error", "text": f"{type(e).__name__}: {e}"})
                 finally:
-                    brain.on_tool, brain.ctx.confirm = old_tool, old_confirm
+                    brain.on_tool, brain.ctx.confirm, brain.channel = old_tool, old_confirm, old_channel
                     events.put(None)
 
         threading.Thread(target=work, daemon=True).start()
@@ -206,7 +208,11 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
 
     # -- pages -------------------------------------------------------
     @app.get("/", response_class=HTMLResponse)
-    def index():
+    def core_page():
+        return FileResponse(STATIC / "core.html")
+
+    @app.get("/console", response_class=HTMLResponse)
+    def console_page():
         return FileResponse(STATIC / "index.html")
 
     @app.get("/manifest.webmanifest")
@@ -294,7 +300,7 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
         text = str(body.get("text", "")).strip()
         if not text:
             raise HTTPException(400, "Empty message.")
-        return StreamingResponse(web.chat_stream(s, text, bool(body.get("voice"))),
+        return StreamingResponse(web.chat_stream(s, text, bool(body.get("voice")), style=str(body.get("style", ""))),
                                  media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
@@ -851,13 +857,16 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
             raise HTTPException(413, "Image too large (max 5 MB).")
         question = str(body.get("question") or "What do you see?").strip()
         return StreamingResponse(web.chat_stream(s, question, bool(body.get("voice")),
-                                                 images=[{"media_type": media_type, "data": img}]),
+                                                 images=[{"media_type": media_type, "data": img}], style=str(body.get("style", ""))),
                                  media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
 
     @app.get("/api/voices")
     def voices(s: Session = Depends(auth)):
-        return {"default": cfg["voice"].get("edge_voice", "en-GB-RyanNeural"), "server_tts": _has("edge_tts"),
-                "voices": VOICES}
+        eleven = _eleven_ready(cfg)
+        default = (f"eleven:{cfg['voice'].get('elevenlabs_voice_id') or ELEVEN_VOICES[0]['id'].split(':')[1]}" if eleven
+                   else cfg["voice"].get("edge_voice", "en-GB-RyanNeural"))
+        return {"default": default, "server_tts": _has("edge_tts") or eleven,
+                "voices": (ELEVEN_VOICES if eleven else []) + VOICES}
 
     # -- voice ---------------------------------------------------------
     @app.post("/api/transcribe")
@@ -878,6 +887,16 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
 
     @app.get("/api/tts")
     def tts(text: str, s: Session = Depends(auth), voice: str = ""):
+        text = text[:3000]
+        if voice.startswith("eleven:") or (not voice and _eleven_ready(cfg)):
+            try:
+                return Response(_eleven_tts(cfg, text, voice.split(":", 1)[1] if voice.startswith("eleven:") else ""),
+                                media_type="audio/mpeg")
+            except Exception as e:  # noqa: BLE001 - fall back to the free voice
+                import logging
+
+                logging.getLogger("jarvis.web").warning("ElevenLabs failed, using Edge voice: %s", e)
+                voice = ""
         if not _has("edge_tts"):
             raise HTTPException(501, "Server voice isn't installed.")
         import asyncio
@@ -888,7 +907,7 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
         fd, path = tempfile.mkstemp(suffix=".mp3")
         os.close(fd)
         chosen = voice if voice in {v["id"] for v in VOICES} else cfg["voice"].get("edge_voice", "en-GB-RyanNeural")
-        asyncio.run(edge_tts.Communicate(text[:3000], chosen).save(path))
+        asyncio.run(edge_tts.Communicate(text, chosen).save(path))
         data = Path(path).read_bytes()
         os.unlink(path)
         return Response(data, media_type="audio/mpeg")
@@ -906,6 +925,24 @@ VOICES = [
     {"id": "en-IE-ConnorNeural", "label": "Connor (Irish)"},
     {"id": "en-SG-WayneNeural", "label": "Wayne (Singaporean)"},
 ]
+
+
+ELEVEN_VOICES = [
+    {"id": "eleven:onwK4e9ZLuTAKqWW03F9", "label": "Daniel (ElevenLabs, British, authoritative)"},
+    {"id": "eleven:JBFqnCBsd6RMkjVDRZzb", "label": "George (ElevenLabs, British, warm)"},
+]
+
+
+def _eleven_ready(cfg) -> bool:
+    from ..voice.eleven import ready
+
+    return ready(cfg["voice"])
+
+
+def _eleven_tts(cfg, text: str, voice_id: str = "") -> bytes:
+    from ..voice.eleven import synthesize
+
+    return synthesize(cfg["voice"], text, voice_id)
 
 
 def requests_quote(text: str) -> str:

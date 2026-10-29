@@ -33,6 +33,12 @@ class Speaker:
         self._lock = threading.Lock()
         self._proc: subprocess.Popen | None = None
         self._pyttsx = None
+        if self.backend == "elevenlabs":
+            from .eleven import ready
+
+            if not ready(voice_cfg):
+                log.warning("ElevenLabs not configured (ELEVENLABS_API_KEY); using edge voice")
+                self.backend = "edge"
         if self.backend == "edge":
             try:
                 import edge_tts  # noqa: F401
@@ -52,7 +58,9 @@ class Speaker:
         print(f"\n🤖 {text}\n")
         with self._lock:
             try:
-                if self.backend == "edge":
+                if self.backend == "elevenlabs":
+                    self._eleven(text)
+                elif self.backend == "edge":
                     self._edge(text)
                 elif self.backend == "system":
                     self._system(text)
@@ -91,6 +99,25 @@ class Speaker:
                       "while($p.NaturalDuration.HasTimeSpan -eq $false){Start-Sleep -m 50};"
                       "Start-Sleep -m ([int]$p.NaturalDuration.TimeSpan.TotalMilliseconds)")
                 self._play(["powershell", "-NoProfile", "-Command", ps])
+        finally:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    def _eleven(self, text: str) -> None:
+        from .eleven import synthesize
+
+        fd, path = tempfile.mkstemp(suffix=".mp3")
+        os.close(fd)
+        try:
+            with open(path, "wb") as fh:
+                fh.write(synthesize(self.cfg, text))
+            cmd = _player_cmd(path)
+            if cmd:
+                self._play(cmd)
+            else:
+                raise RuntimeError("no audio player")
         finally:
             try:
                 os.remove(path)

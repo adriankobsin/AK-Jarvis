@@ -240,3 +240,39 @@ def test_ip_camera_snapshot_and_tool(tmp_path, monkeypatch):
     out, err = b.registry.execute("look_at_camera", {"name": "anchor_pocket"}, b.ctx)
     assert not err and out[1]["type"] == "image" and out[1]["source"]["media_type"] == "image/jpeg"
     srv.shutdown()
+
+
+def test_core_screen_console_and_core_style(env):
+    c, client, hh, _ = env
+    login(c)
+    core = c.get("/").text
+    assert "holographic core" in core and "three" in core and 'href="/console"' in core
+    assert "Control centre" in c.get("/console").text or "JARVIS" in c.get("/console").text
+    r = c.post("/api/chat", json={"text": "status report", "style": "core"})
+    assert events(r)[-1]["type"] in ("reply", "done")
+    system = json.dumps(client.calls[-1]["system"])
+    assert "HOLOGRAPHIC CORE" in system and "SPOKEN aloud" in system
+    assert hh.brain("owner").channel != "core"  # restored after the request
+    c.post("/api/chat", json={"text": "hello"})
+    assert "HOLOGRAPHIC CORE" not in json.dumps(client.calls[-1]["system"])
+
+
+def test_elevenlabs_voice(env, monkeypatch):
+    c, _, hh, _ = env
+    login(c)
+    assert not any(v["id"].startswith("eleven:") for v in c.get("/api/voices").json()["voices"])
+    hh.cfg["voice"]["tts"] = "elevenlabs"
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "k-test")
+    sent = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        sent.update(url=url, headers=headers, json=json)
+        return SimpleNamespace(status_code=200, content=b"ID3mp3", text="")
+
+    monkeypatch.setattr("jarvis.voice.eleven.requests.post", fake_post)
+    v = c.get("/api/voices").json()
+    assert v["server_tts"] and v["default"] == "eleven:onwK4e9ZLuTAKqWW03F9"
+    r = c.get("/api/tts", params={"text": "Good evening, sir.", "voice": "eleven:JBFqnCBsd6RMkjVDRZzb"})
+    assert r.status_code == 200 and r.content == b"ID3mp3" and r.headers["content-type"].startswith("audio/mpeg")
+    assert sent["url"].endswith("/JBFqnCBsd6RMkjVDRZzb") and sent["headers"]["xi-api-key"] == "k-test"
+    assert sent["json"]["model_id"] == "eleven_flash_v2_5"

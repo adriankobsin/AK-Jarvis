@@ -13,3 +13,6 @@ VAPI_API_KEY=
 
 # Optional: email (app password for the sending mailbox)
 JARVIS_SMTP_PASSWORD=
+
+# Optional: premium voice (voice.tts: elevenlabs in config)
+ELEVENLABS_API_KEY=
