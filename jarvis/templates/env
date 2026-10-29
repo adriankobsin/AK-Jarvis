@@ -4,6 +4,9 @@ ANTHROPIC_API_KEY=sk-ant-...
 # Optional: Home Assistant long-lived access token (Profile → Security → Long-lived tokens)
 HA_TOKEN=
 
+# Web app login password (jarvis web / jarvis server)
+JARVIS_WEB_PASSWORD=
+
 # Optional: phone line (see `jarvis phone setup`)
 JARVIS_PHONE_SECRET=
 VAPI_API_KEY=

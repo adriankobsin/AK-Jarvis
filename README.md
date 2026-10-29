@@ -19,6 +19,7 @@ on your computer, your smart home and your AV equipment.
 | 👦 **Family** | A separate tutor profile for your son: school help that teaches rather than hands out answers, game development, music and YouTube coaching, kid-safe rules, his own memory, and a weekly report to you |
 | 🌐 **Browser** | Runs his own Chrome window that you can watch: opens sites, reads pages, fills in online forms and applications, uploads files, takes screenshots. Asks your approval before anything is submitted, paid or sent |
 | 📄 **Documents** | Fills in Word templates (placeholders, blanks, tables, headers), PDF forms and Excel sheets, and drafts new Word documents. The original file is never overwritten |
+| 🖥️ **Web app** | Open Jarvis in any browser, including your phone. Chat, voice, a live view of the tools he's using, approve/decline pop-ups, and pages to manage memory, knowledge, procedures, tasks, reminders, automations, phone and family. A "How it's built" page shows the architecture |
 | 💻 **Computer** | Open apps and URLs, run shell commands (only after you confirm), set volume, check system status, show notifications |
 
 ---
@@ -113,6 +114,36 @@ night at 03:15. Point `backup.folder` at OneDrive so a copy exists off your mach
 search with BM25 ranking) and adds the most relevant excerpts to Claude's context. Claude can
 also search on purpose, read whole documents, and tell you which document an answer came from.
 If the answer isn't there, Jarvis is told to say he doesn't know yet rather than guess.
+
+---
+
+## The web app
+
+```bash
+# in ~/.jarvis/.env
+JARVIS_WEB_PASSWORD=choose-a-long-password
+
+jarvis web          # → http://localhost:8788, or http://<mini-pc-ip>:8788 from your phone on the same network
+```
+`jarvis server` starts the web app automatically. To use it away from home, add a second
+hostname to the Cloudflare Tunnel (for example `app.<your-domain>` → `localhost:8788`). The
+password login protects it. You can also add it to your phone's home screen, where it opens
+like an app.
+
+| Page | What you can do there |
+|---|---|
+| **Chat** | Type or tap the mic. You see each tool as Jarvis uses it ("Searching your knowledge", "Filling in a form"…). Approve or decline actions like submitting a form or running a command. Turn on teach mode, or have replies read aloud |
+| **Memory** | Search, add, edit or remove facts. Instructions and corrections are listed first because they're always applied |
+| **Knowledge** | Upload documents, write notes, add web pages, search everything Jarvis knows and read any source |
+| **Procedures** | View and edit the step-by-step ways you do things |
+| **Tasks & reminders** | Your to-do list, and reminders delivered out loud, as a notification or by phone call |
+| **Automations** | Scheduled instructions, with presets and "Run now" |
+| **Phone** | Messages taken from unknown callers, and a "Call my phone now" button |
+| **Family** | Switch to your son's tutor profile. Switching back needs the PIN |
+| **How it's built** | The architecture, every tool grouped by area, integration status, and a download of everything Jarvis knows |
+
+To try it without a server, run `python scripts/build_web_demo.py`. It builds
+`dist/jarvis-web-demo.html`, the same interface running on sample data.
 
 ---
 
@@ -321,13 +352,15 @@ jarvis/
   household.py      one Brain + scheduler per profile, PIN-protected switching
   phone.py          Vapi custom-LLM gateway (SSE), guest receptionist, outbound calls
   emailer.py        SMTP for parent reports and alerts
+  web/server.py     FastAPI backend: streaming chat (SSE), approvals, management API, voice
+  web/static/       the single-page web app (no build step)
   scheduler.py      reminders, automations, morning briefing
   store.py          SQLite: memories, procedures, tasks, reminders, automations, log
   tools/            system · memory · knowledge · expert · tasks · weather · devices · kids · comms
                     · browser (Playwright) · documents (Word/PDF/Excel)
   voice/            audio.py (mic, VAD, Whisper, wake word) · tts.py · loop.py
   templates/        default config.yaml and .env
-tests/              47 tests (Claude, audio, devices and Vapi mocked; phone gateway over real HTTP;
+tests/              53 tests (Claude, audio, devices and Vapi mocked; phone gateway over real HTTP;
                     browser tested in real headless Chromium; real Word/PDF/Excel files)
 ```
 

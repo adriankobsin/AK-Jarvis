@@ -98,6 +98,13 @@ DEFAULTS: dict[str, Any] = {
         "filler_after_seconds": 2.5,
         "session_minutes": 30,
     },
+    "web": {
+        "enabled": True,
+        "host": "0.0.0.0",
+        "port": 8788,
+        "password_env": "JARVIS_WEB_PASSWORD",   # owner login for the web UI
+        "session_days": 30,
+    },
     "browser": {
         "mode": "jarvis",          # jarvis = own persistent Chrome profile; cdp = attach to a running Chrome
         "headless": False,         # show the window so you can watch / take over

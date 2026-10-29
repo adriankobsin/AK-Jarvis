@@ -92,6 +92,10 @@ phone:
   callers: {}                     # e.g. {"+6598765432": son} — your son's phone → his profile
   filler_after_seconds: 2.5       # says "One moment" if thinking takes longer than this
 
+web:
+  enabled: true                   # web app at http://<mini-pc>:8788 — password: JARVIS_WEB_PASSWORD in .env
+  port: 8788
+
 browser:
   mode: jarvis                    # jarvis = Jarvis's own Chrome window with a saved profile (log in once)
                                   # cdp    = attach to a Chrome you started with --remote-debugging-port=9222

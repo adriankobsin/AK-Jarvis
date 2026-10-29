@@ -7,7 +7,8 @@
     jarvis learn PATH|URL  add documents, folders or web pages to the knowledge base
     jarvis backup          back up memory + knowledge (SQLite + readable Markdown)
     jarvis ask "..."       one-shot question
-    jarvis server          always-on (mini PC): reminders, automations, phone line, all profiles
+    jarvis web             web app in your browser (chat, voice, memory, knowledge, tasks…)
+    jarvis server          always-on (mini PC): reminders, automations, phone line, web app
     jarvis phone setup     step-by-step phone setup (Vapi); `phone test` / `phone call`
     jarvis -p leo voice    run as another profile (e.g. your son's tutor profile)
     jarvis doctor          check configuration, API key, devices, audio
@@ -304,6 +305,34 @@ def start_phone(cfg, hh, alert):
     return srv
 
 
+def start_web(cfg, hh, block: bool = False):
+    from .web.server import serve_web
+
+    pw_env = cfg["web"].get("password_env", "JARVIS_WEB_PASSWORD")
+    if not os.environ.get(pw_env):
+        print(f"🌐 Web app not started: set {pw_env} in ~/.jarvis/.env first.")
+        if block:
+            sys.exit(1)
+        return None
+    print(f"🌐 Web app on http://localhost:{cfg['web'].get('port', 8788)}  (also from other devices on your network)")
+    return serve_web(cfg, hh, block=block)
+
+
+def cmd_web(cfg, args) -> None:
+    """Web app only (plus schedulers for every profile)."""
+    require_key()
+    from .household import Household
+
+    hh = Household(cfg, show_tools=args.verbose)
+    hh.all_brains()
+    if getattr(args, "port", None):
+        cfg["web"]["port"] = args.port
+    try:
+        start_web(cfg, hh, block=True)
+    finally:
+        hh.shutdown()
+
+
 def cmd_ask(cfg, args) -> None:
     require_key()
     brain = build(cfg, show_tools=args.verbose, profile=args.profile)
@@ -330,6 +359,8 @@ def cmd_server(cfg, args) -> None:
     hh = Household(cfg, alert=alert, show_tools=args.verbose)
     hh.all_brains()
     srv = start_phone(cfg, hh, alert) if not getattr(args, "no_phone", False) else None
+    if cfg["web"].get("enabled") and not getattr(args, "no_web", False):
+        start_web(cfg, hh)
     print(f"Jarvis server running for profiles: {', '.join(hh.profiles)}. Ctrl+C to stop.")
     try:
         while True:
@@ -536,6 +567,9 @@ def main(argv: list[str] | None = None) -> None:
         b = sub.add_parser(nm, help=hlp)
         b.add_argument("--speak", action="store_true", help="Speak alerts on this machine")
         b.add_argument("--no-phone", action="store_true")
+        b.add_argument("--no-web", action="store_true")
+    w = sub.add_parser("web", help="Web app in your browser (http://localhost:8788)")
+    w.add_argument("--port", type=int)
     ph = sub.add_parser("phone", help="Phone line: setup | test | call")
     ph.add_argument("action", choices=["setup", "test", "call"])
     ph.add_argument("--number", help="Caller number (test) or number to ring (call)")
@@ -552,7 +586,7 @@ def main(argv: list[str] | None = None) -> None:
     if cmd == "teach":
         args.teach = True
     {"chat": cmd_chat, "voice": cmd_voice, "ask": cmd_ask, "background": cmd_server,
-     "server": cmd_server, "phone": cmd_phone,
+     "server": cmd_server, "phone": cmd_phone, "web": cmd_web,
      "doctor": cmd_doctor, "init": cmd_init, "teach": cmd_teach, "learn": cmd_learn,
      "backup": cmd_backup}[cmd](cfg, args)
 
