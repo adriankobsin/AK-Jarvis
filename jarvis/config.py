@@ -13,6 +13,7 @@ DEFAULTS: dict[str, Any] = {
     "assistant": {
         "name": "Jarvis",
         "user_name": "",
+        "company": "",
         "honorific": "sir",
         "home_location": "",
         "data_dir": "~/.jarvis",
@@ -125,6 +126,21 @@ DEFAULTS: dict[str, Any] = {
         "verify_ssl": True,
     },
     "devices": {"http": [], "tcp": [], "wol": []},
+    "openai": {                    # second model working with Claude (consult_gpt / council tools)
+        "model": "gpt-6.1-sol",
+        "effort": "medium",
+        "key_env": "OPENAI_API_KEY",
+        "base_url": "https://api.openai.com/v1",
+    },
+    "mcp": {                       # lets Hermes (or any MCP client) use Jarvis's tools
+        "enabled": True,
+        "token_env": "JARVIS_MCP_TOKEN",   # Bearer token Hermes must send to /mcp
+        "exclude_tools": ["run_shell_command"],   # Hermes has its own terminal
+    },
+    "approvals": {                 # how actions requested by Hermes get YOUR OK
+        "timeout_seconds": 180,
+        "telegram": {"bot_token_env": "JARVIS_APPROVALS_BOT_TOKEN", "chat_id_env": "JARVIS_APPROVALS_CHAT_ID"},
+    },
 }
 
 

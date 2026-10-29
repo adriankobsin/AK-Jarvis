@@ -96,6 +96,10 @@ def build_registry(config) -> ToolRegistry:
     for mod in (system, memory, knowledge, expert, tasks, weather, devices, kids, comms,
                 browser, documents, media, integrations, programs):
         mod.register(reg, config)
+    from .openai_pair import openai_ready
+    if openai_ready(config):   # Claude + GPT working together (needs OPENAI_API_KEY)
+        from . import openai_pair
+        openai_pair.register(reg, config)
     role = (config.get("profile") or {}).get("role", "owner")
     if role == "child":
         from ..profiles import CHILD_TOOLS

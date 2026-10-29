@@ -68,6 +68,8 @@ class WebApp:
             self._chain(title, text)
         else:
             notify(title, text)
+        if getattr(self, "alert_forward", None):
+            self.alert_forward(title, text)     # reminders, program alarms, phone messages → your phone
         evt = {"type": "alert", "title": title, "text": text, "ts": datetime.now().isoformat(timespec="seconds")}
         self.alerts = (self.alerts + [evt])[-50:]
         for q in list(self.subscribers):
@@ -202,6 +204,16 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
     web = WebApp(cfg, household, password)
     app = FastAPI(title="Jarvis", version=__version__, docs_url=None, redoc_url=None)
     app.state.web = web
+    from ..approvals import ApprovalRouter
+
+    web.approvals = ApprovalRouter(cfg, broadcast=web.broadcast, pending=web.pending)
+    if (cfg.get("approvals") or {}).get("forward_alerts", True) and web.approvals.telegram_ready:
+        web.alert_forward = lambda t, m: threading.Thread(target=web.approvals.notify, args=(t, m), daemon=True).start()
+    if (cfg.get("mcp") or {}).get("enabled", True):
+        from ..mcp_bridge import JarvisMCP, mount_http
+
+        web.approvals.start()
+        mount_http(app, JarvisMCP(web.hh, web.approvals, web=web), cfg)
 
     def auth(request: Request) -> Session:
         return web.session(request)
@@ -226,37 +238,6 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
     @app.get("/icon.svg")
     def icon():
         return FileResponse(STATIC / "icon.svg", media_type="image/svg+xml")
-
-    def broadcast(self, evt: dict) -> None:
-        for q in list(self.subscribers):
-            q.put(evt)
-
-    # -- live activity -------------------------------------------------
-    def activity(self, e: dict) -> None:
-        e = dict(e)
-        run = self.runs.get(e.get("run", ""))
-        if e["type"] == "run_start":
-            run = self.runs[e["run"]] = {"run": e["run"], "text": e.get("text", ""), "channel": e.get("channel"),
-                                         "profile": e.get("profile"), "started": e["ts"], "status": "running",
-                                         "steps": [], "mode": e.get("mode")}
-            for k in [k for k, v in self.runs.items() if v["status"] != "running"][:-12]:
-                self.runs.pop(k, None)  # keep the last dozen finished runs
-        elif run and e["type"] == "tool":
-            step = next((s for s in run["steps"] if e.get("step") and s.get("step") == e["step"]), None)
-            if step:
-                step.update({k: e[k] for k in ("status", "ms", "result") if k in e})
-            else:
-                run["steps"].append({k: e.get(k) for k in ("step", "name", "args", "status", "ms")})
-        elif run and e["type"] == "run_end":
-            run.update(status="done" if e.get("ok") else "error", ended=e["ts"], ms=e.get("ms"), reply=e.get("reply", ""))
-        if e["type"] != "thinking":
-            self.recent.append(e)
-        self.broadcast({"type": "activity", "event": e})
-
-    def media(self, item: dict) -> None:
-        item = {**item, "id": uuid.uuid4().hex[:8], "ts": datetime.now().isoformat(timespec="seconds")}
-        self.media_items.append(item)
-        self.broadcast({"type": "media", "item": item})
 
     # -- auth --------------------------------------------------------
     @app.post("/api/login")
@@ -307,8 +288,10 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
     @app.post("/api/confirm")
     def confirm(body: dict, s: Session = Depends(auth)):
         box = web.pending.get(str(body.get("id")))
-        if not box:
+        if not box or box["event"].is_set():
             raise HTTPException(404, "That request has expired.")
+        if box.get("owner_only"):
+            web.owner_only(s)   # requests from Hermes can only be approved by the owner
         box["answer"] = bool(body.get("approve"))
         box["event"].set()
         return {"ok": True}

@@ -27,6 +27,29 @@ on your computer, your smart home and your AV equipment.
 
 ---
 
+## Always-on Jarvis: Hermes + VPS + local (v1.8)
+
+Jarvis now runs on **[Hermes Agent](https://github.com/NousResearch/hermes-agent)** as the brain and
+messaging hub, with Jarvis plugged in as a toolset over MCP. **Full guide: [docs/HERMES.md](docs/HERMES.md).**
+
+- **Where it runs:** a Singapore VPS runs 24/7 (Hermes + cloud Jarvis), and each home, office or yacht machine runs a local Jarvis for the building systems and core screen. They connect privately over Tailscale.
+- **Models:** Claude Opus is the main brain. GPT gives second opinions (`consult_gpt`), runs side by side with Claude on big questions (`council`), takes over if Claude is unavailable, and runs sub-agents.
+- **Memory:** Hermes's self-curating memory, plus the unlimited Jarvis knowledge base, plus a search of every past conversation. He starts out already knowing about you and Wave, and a teach-me interview fills the gaps.
+- **Skills:** 13 Wave skills, covering email and calendar, the daily briefing, yacht systems design, quotations, social content, SEO, business development, finance, engineering calculations, the app builder, building control, teach-me and second opinions. More skills come from the Hermes Skills Hub.
+- **Connectors:** Microsoft 365 (Outlook, Calendar, OneDrive, SharePoint), GitHub, Xero, DataForSEO, Ayrshare social posting, n8n, Home Assistant (AirTouch), web search, browser and image generation.
+- **Channels:** Telegram and WhatsApp (text, files, voice notes with spoken replies), the core screen with live voice, and phone calls. iMessage can be added later with a Mac.
+- **Approvals:** anything Hermes asks Jarvis to change needs your OK, given on the core screen or with a Telegram Approve button. Alerts reach your phone.
+
+```bash
+# VPS (as root):
+curl -fsSL https://raw.githubusercontent.com/adriankobsin/AK-Jarvis/Main/deploy/vps/bootstrap.sh | bash
+su - jarvis && cd AK-Jarvis && ./deploy/setup.sh cloud
+# Home/office/yacht machine:
+curl -fsSL https://raw.githubusercontent.com/adriankobsin/AK-Jarvis/Main/deploy/local/install.sh | bash -s -- site
+```
+`jarvis server` also serves Jarvis's tools to any MCP client at `/mcp` (Bearer `JARVIS_MCP_TOKEN`);
+`jarvis mcp` serves them over stdio.
+
 ## Quick start
 
 **Requirements:** Python 3.10+, a microphone and speakers, and an Anthropic API key from

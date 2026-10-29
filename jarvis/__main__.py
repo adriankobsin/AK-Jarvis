@@ -333,6 +333,14 @@ def cmd_web(cfg, args) -> None:
         hh.shutdown()
 
 
+def cmd_mcp(cfg, args) -> None:
+    """Serve Jarvis's tools over MCP on stdin/stdout (for Hermes or another MCP client)."""
+    require_key()
+    from .mcp_bridge import run_stdio
+
+    run_stdio(cfg)
+
+
 def cmd_ask(cfg, args) -> None:
     require_key()
     brain = build(cfg, show_tools=args.verbose, profile=args.profile)
@@ -574,6 +582,7 @@ def main(argv: list[str] | None = None) -> None:
     ph.add_argument("action", choices=["setup", "test", "call"])
     ph.add_argument("--number", help="Caller number (test) or number to ring (call)")
     ph.add_argument("--message", help="Opening line for `call`")
+    sub.add_parser("mcp", help="Serve Jarvis's tools to Hermes/MCP clients over stdio")
     sub.add_parser("doctor", help="Diagnose setup")
     sub.add_parser("init", help="Create config files in ~/.jarvis")
     args = p.parse_args(argv)
@@ -588,7 +597,7 @@ def main(argv: list[str] | None = None) -> None:
     {"chat": cmd_chat, "voice": cmd_voice, "ask": cmd_ask, "background": cmd_server,
      "server": cmd_server, "phone": cmd_phone, "web": cmd_web,
      "doctor": cmd_doctor, "init": cmd_init, "teach": cmd_teach, "learn": cmd_learn,
-     "backup": cmd_backup}[cmd](cfg, args)
+     "backup": cmd_backup, "mcp": cmd_mcp}[cmd](cfg, args)
 
 
 if __name__ == "__main__":

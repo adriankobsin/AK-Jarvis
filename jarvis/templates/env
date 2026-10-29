@@ -16,3 +16,13 @@ JARVIS_SMTP_PASSWORD=
 
 # Optional: premium voice (voice.tts: elevenlabs in config)
 ELEVENLABS_API_KEY=
+
+# Optional: GPT as Claude's second opinion (consult_gpt / council tools)
+OPENAI_API_KEY=
+
+# Hermes ↔ Jarvis link: Hermes sends this token to Jarvis's /mcp endpoint (any long random string)
+JARVIS_MCP_TOKEN=
+
+# Approvals for actions Hermes asks Jarvis to do: a separate Telegram bot (from @BotFather) + your chat id
+JARVIS_APPROVALS_BOT_TOKEN=
+JARVIS_APPROVALS_CHAT_ID=

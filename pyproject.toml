@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-assistant"
-version = "1.7.0"
+version = "1.8.0"
 description = "Jarvis — a personal desktop AI assistant powered by Claude"
 requires-python = ">=3.10"
 dependencies = [
@@ -25,6 +25,7 @@ dependencies = [
     "uvicorn>=0.29",
     "python-multipart>=0.0.9",
     "pymodbus>=3.6",
+    "mcp>=2.3,<3",
 ]
 
 [project.optional-dependencies]

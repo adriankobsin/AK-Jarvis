@@ -164,7 +164,7 @@
     const [p, query] = path.split("?");
     const qs = new URLSearchParams(query || "");
     const m = (re) => p.match(re);
-    if (p === "/api/state") return { assistant: "Jarvis", version: "1.7.0", model: "claude-sonnet-5-5", profile: people[current], profiles: Object.values(people), mode, phone_enabled: true, alerts: [] };
+    if (p === "/api/state") return { assistant: "Jarvis", version: "1.8.0", model: "claude-sonnet-5-5", profile: people[current], profiles: Object.values(people), mode, phone_enabled: true, alerts: [] };
     if (p === "/api/history") return d.log.slice(-40);
     if (p === "/api/login" || p === "/api/logout") return { ok: true };
     if (p === "/api/profile") {
@@ -298,7 +298,7 @@
     if (p === "/api/system") {
       const tools = current === "owner" ? TOOLS.owner : TOOLS.kid;
       return {
-        version: "1.7.0", model: "claude-sonnet-5-5", expert_model: "claude-opus-5-5", web_search: true,
+        version: "1.8.0", model: "claude-sonnet-5-5", expert_model: "claude-opus-5-5", web_search: true,
         tools, tool_count: Object.values(tools).reduce((a, v) => a + v.length, 0),
         counts: { memories: d.memories.length, procedures: d.procedures.length, open_tasks: d.tasks.filter(t => !t.done).length, reminders: d.reminders.length, automations: d.automations.length, knowledge_sources: d.sources.length },
         integrations: { claude_api: true, home_assistant: true, phone: true, email: true, watched_folders: 2, browser: true, voice: true, cameras: true, integrations: INTS.length },

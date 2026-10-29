@@ -463,12 +463,14 @@ function closePanels(kind) { // no kind: everything
   document.querySelectorAll(".panel").forEach(p => { if (!kind || p.dataset.kind === kind) dropPanel(p); });
 }
 function panel(title, html, { amber = false, ttl = 45000, kind = "main" } = {}) {
-  if (kind === "main") closePanels("main");
+  if (kind === "main" || kind === "approval") closePanels(kind);
   else { const alerts = [...panelsEl.querySelectorAll('.panel[data-kind="alert"]:not(.out)')]; if (alerts.length >= 2) dropPanel(alerts[0]); }
   const el = document.createElement("section");
   el.className = "panel" + (amber ? " amber" : ""); el.dataset.kind = kind;
   el.innerHTML = `<div class="ph"><span>▸ ${esc(title)}</span><button class="x" aria-label="Close">×</button></div><div class="bar"></div><div class="pb">${html}</div>`;
-  if (kind === "main") panelsEl.prepend(el); else panelsEl.appendChild(el);
+  if (kind === "approval") panelsEl.prepend(el);
+  else if (kind === "main") { const a = panelsEl.querySelector('[data-kind="approval"]'); a ? a.after(el) : panelsEl.prepend(el); }
+  else panelsEl.appendChild(el);
   document.body.classList.add("panel-open");
   el.querySelector(".x").onclick = () => dropPanel(el);
   if (ttl) { const arm = () => { el._t = setTimeout(() => { if (!el.matches(":hover")) dropPanel(el); else arm(); }, ttl); }; arm(); }
@@ -624,7 +626,7 @@ async function send(text) {
     await stream(text, (e) => {
       if (e.type === "tool") { settleTags(); const v = e.args && Object.values(e.args).find(x => typeof x === "string" && x.trim()); addTag(e.name, v); setState("thinking", "PROCESSING", (LABEL[e.name] || e.name).toUpperCase()); }
       else if (e.type === "confirm") approval(e);
-      else if (e.type === "confirm_result") { document.querySelectorAll('.panel.amber[data-kind="main"]').forEach(dropPanel); setState("thinking", "PROCESSING", e.approved ? "AUTHORISED" : "CANCELLED"); }
+      else if (e.type === "confirm_result") { document.querySelectorAll('.panel[data-kind="approval"]').forEach(dropPanel); setState("thinking", "PROCESSING", e.approved ? "AUTHORISED" : "CANCELLED"); }
       else if (e.type === "reply") reply = e.text;
       else if (e.type === "error") reply = "I ran into a problem: " + e.text;
     });
@@ -641,7 +643,7 @@ async function send(text) {
 
 function approval(e) {
   setState("alert", "AUTHORISATION REQUIRED", "SAY YES OR NO");
-  const el = panel("Authorisation required", `<div class="md"><p>I need your approval before I do this:</p></div><div class="what">${esc(e.message)}</div><div class="btns"><button class="hbtn no" data-a="0">Decline</button><button class="hbtn go" data-a="1">Approve</button></div>`, { amber: true, ttl: 0 });
+  const el = panel("Authorisation required" + (e.source ? " · " + e.source : ""), `<div class="md"><p>${e.source ? esc(e.source) + " is asking to do this:" : "I need your approval before I do this:"}</p></div><div class="what">${esc(e.message)}</div><div class="btns"><button class="hbtn no" data-a="0">Decline</button><button class="hbtn go" data-a="1">Approve</button></div>`, { amber: true, ttl: 0, kind: "approval" });
   let answered = false;
   const answer = async (ok) => {
     if (answered) return; answered = true;
@@ -687,6 +689,13 @@ function connectEvents() {
   es.onerror = () => { $("#sys").textContent = "LINK LOST · RECONNECTING"; };
 }
 function onEvent(e) {
+  if (e.type === "confirm" && e.source) { approval(e); return; }   // Hermes (or another agent) needs your OK
+  if (e.type === "confirm_result" && e.source) { document.querySelectorAll('.panel[data-kind="approval"]').forEach(dropPanel); if (!busy && !speaking) idle(); return; }
+  if (e.type === "panel") {   // something Hermes wants on the big screen
+    panel(e.title || "Jarvis", `<div class="md">${md(e.markdown || "")}</div>`, { ttl: 90000 });
+    if (e.speak && !busy && !speaking) { subs("", e.speak); speak(e.speak); }
+    return;
+  }
   if (e.type === "media" && e.item && e.item.auto) showMedia(e.item);
   else if (e.type === "alert") {
     panel(e.title || "Alert", `<div class="md"><p>${esc(e.text)}</p></div>`, { amber: true, ttl: 30000, kind: "alert" });
