@@ -1,1 +1,363 @@
 # AK-Jarvis
+
+A personal, always-listening AI assistant for your desktop, powered by Claude.
+Say **"Hey Jarvis"**, ask it something, and it answers aloud. It can also take actions
+on your computer, your smart home and your AV equipment.
+
+| | |
+|---|---|
+| 🎙️ **Voice** | Offline "Hey Jarvis" wake word, local Whisper speech-to-text, natural British neural voice, follow-up conversation without repeating the wake word |
+| 🧠 **Brain** | Claude (Sonnet 5.5 by default) running an agent loop with 40 tools, which can chain several actions in one request |
+| 🎓 **Expert** | Answers as a senior expert in programming, servers, yachts, telecoms, electronics, physics, science, history, business, economics and any other fields you list. Hard problems go to Claude Opus 5.5 (`ask_expert`) |
+| 📚 **Learns from you** | Teach mode interview, a knowledge base of your documents, folders and web pages, learned procedures ("how I do X"), corrections and standing instructions |
+| 🌐 **Live info** | Claude's built-in web search, plus weather (Open-Meteo, no key needed) |
+| 📝 **Memory** | Remembers facts about you between sessions and pulls relevant knowledge into every answer automatically. Backed up nightly |
+| ✅ **Tasks & reminders** | To-do list, one-off and repeating reminders (spoken and shown as desktop notifications) |
+| ⏰ **Automations** | Recurring instructions on a cron schedule ("every weekday at 7:30 brief me", "lights off at 23:30") plus a built-in morning briefing |
+| 🏠 **Devices & AV** | Home Assistant (lights, climate, media, scenes, covers…), raw TCP control of AV gear (HDMI matrices, DSPs, PJLink projectors, Extron/Crestron-style ASCII), HTTP webhooks, Wake-on-LAN |
+| 📞 **Phone** | Call Jarvis from your mobile, or have him call you with reminders, alerts and automations. Uses a Vapi phone line, with Jarvis's own brain, memory and tools on every call. Unknown callers get a receptionist that only takes messages |
+| 👦 **Family** | A separate tutor profile for your son: school help that teaches rather than hands out answers, game development, music and YouTube coaching, kid-safe rules, his own memory, and a weekly report to you |
+| 🌐 **Browser** | Runs his own Chrome window that you can watch: opens sites, reads pages, fills in online forms and applications, uploads files, takes screenshots. Asks your approval before anything is submitted, paid or sent |
+| 📄 **Documents** | Fills in Word templates (placeholders, blanks, tables, headers), PDF forms and Excel sheets, and drafts new Word documents. The original file is never overwritten |
+| 💻 **Computer** | Open apps and URLs, run shell commands (only after you confirm), set volume, check system status, show notifications |
+
+---
+
+## Quick start
+
+**Requirements:** Python 3.10+, a microphone and speakers, and an Anthropic API key from
+[console.anthropic.com](https://console.anthropic.com). For live web answers, turn on web
+search for your organisation in the Claude Console.
+
+```bash
+# macOS / Linux
+./scripts/install.sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+```
+
+Then:
+
+1. Put your key in `~/.jarvis/.env`: `ANTHROPIC_API_KEY=sk-ant-…`
+2. Edit `~/.jarvis/config.yaml` with your home location, devices and Home Assistant details.
+3. Activate the environment and check the setup:
+   ```bash
+   source .venv/bin/activate
+   jarvis doctor
+   ```
+4. Run it:
+   ```bash
+   jarvis voice          # hands-free: say "Hey Jarvis"
+   jarvis voice --ptt    # push-to-talk: press Enter, then speak
+   jarvis chat           # type instead (add --speak to hear replies)
+   jarvis teach          # let Jarvis interview you about your work
+   jarvis learn ~/Documents/Specs --topic specs
+   jarvis ask "what's on my list today?"
+   jarvis server         # always-on: reminders, automations, phone line (mini PC)
+   jarvis -p son voice   # your son's tutor profile
+   ```
+
+The first time you start voice mode it downloads the Whisper speech model (about 150 MB for
+`base.en`). On macOS, allow Terminal to use the microphone when asked.
+
+**Run at login (macOS):** `./scripts/autostart-macos.sh` (voice mode) or
+`./scripts/autostart-macos.sh background`. On Windows, add a Task Scheduler task for
+`.venv\Scripts\jarvis.exe voice` with the trigger "At log on".
+
+---
+
+## Teaching Jarvis
+
+Jarvis already has Claude's broad expert knowledge of engineering, science, business and more.
+What he doesn't know is **you**: your companies, clients, vessels, products, prices, suppliers,
+standards, and the way you like things done. There are four ways to teach him, and they
+build on each other.
+
+**1. Teach mode (start here).** Jarvis interviews you one question at a time and saves every
+answer as he goes. He covers your role, companies, products, clients, team, suppliers, tools,
+routines, preferences and recurring processes.
+```bash
+jarvis teach            # typed
+jarvis teach --voice    # spoken. Or at any time say "Hey Jarvis, let me teach you"
+```
+Say "stop teaching" (or type `/teach` in chat) to finish, and he'll sum up what he learned.
+Twenty minutes a day for a week gives him a solid picture of your work.
+
+**2. Give him your documents.** He reads PDF, Word, Excel, PowerPoint, Markdown/text, HTML
+and saved `.eml` emails.
+```bash
+jarvis learn ~/Documents/Datasheets --topic datasheets
+jarvis learn "~/Library/CloudStorage/OneDrive-…/Engineering" --topic engineering
+jarvis learn https://www.waveavi.com --topic company
+```
+You can also just say "learn the folder Documents/Quotes". To keep him up to date
+automatically, add folders under `knowledge.watch_folders` in the config, such as your
+SharePoint libraries synced through OneDrive. He re-reads changed files every 30 minutes and
+forgets deleted ones. Scanned PDFs that are only images have no text he can read, so OCR them
+first.
+
+**3. Teach him how you do things.** Say "Jarvis, this is how I prepare a quotation: …".
+He saves it as a named procedure and follows it the next time the task comes up.
+
+**4. Correct him.** When you say "No, Aurora is 72 metres, not 60", he stores it as a
+correction and it overrides everything else from then on. Standing rules work the same way:
+"From now on, always give cable sizes in mm²."
+
+**What he knows is yours to inspect.** In chat, `/memories`, `/procedures`, `/sources` and
+`/kb <query>` show what he's stored. `jarvis backup` writes a full database copy plus a
+readable Markdown file of everything he knows, and a backup also runs automatically every
+night at 03:15. Point `backup.folder` at OneDrive so a copy exists off your machine.
+
+**How recall works:** on every request, Jarvis searches the knowledge base (local full-text
+search with BM25 ranking) and adds the most relevant excerpts to Claude's context. Claude can
+also search on purpose, read whole documents, and tell you which document an answer came from.
+If the answer isn't there, Jarvis is told to say he doesn't know yet rather than guess.
+
+---
+
+## Browser, forms and documents
+
+**The browser.** Jarvis has his own Chrome window with a saved profile. The first time a site
+needs a login, he opens it and asks you to sign in yourself in that window. After that he
+stays logged in the way a normal browser does, and you never have to give him your passwords.
+He reads each page as a list of numbered fields and buttons. He fills them in from what he
+knows (your memory, knowledge base and documents) and asks you for anything missing. **Before
+anything is submitted, paid for, sent, signed or deleted, he asks for your approval.** That's
+an on-screen yes/no at the computer, or a spoken "yes" in voice mode. On a phone call it's
+declined, and he offers to finish it when you're back at the computer.
+
+- "Open the Singapore MPA e-services portal and start the crew pass application for…"
+- "Fill in the supplier registration form on that page with Wave AVI PTE LTD's details."
+- "Find the cheapest flight to Palma on the 12th and get it ready, but don't book it."
+
+To drive your real Google Chrome instead, set `browser.channel: chrome`. To attach to a Chrome
+window that's already running, set `browser.mode: cdp`. Recent Chrome versions only allow this
+with a separate profile, which in practice works the same as Jarvis's own window.
+
+**Documents.**
+- "Fill in the quote template for Captain Smith, M/Y Aurora, total SGD 48,500"
+  (`fill_word_document`)
+- "Complete this berth application PDF" (`fill_pdf_form`)
+- "Put these prices into the costing sheet" (`fill_excel`)
+- "Write a cover letter for…" (`create_word_document`)
+
+Each result is saved next to the original as `name-filled.docx` (or `.pdf`, `.xlsx`), and
+Jarvis tells you anything he couldn't fill. PDFs that are just scans have no fields to fill.
+For those, Jarvis can draft the answers for you to copy across.
+
+---
+
+## Your son's profile
+
+Jarvis has a separate profile for each child, set under `profiles:` in the config (fill in his
+name, age and school level). In that profile Jarvis is a patient mentor for an 11–13-year-old:
+
+- **School:** a tutor, not an answer machine. He gives hints step by step, checks your son's
+  work, makes quizzes and revision plans, and gives feedback on essays without writing them.
+- **Game development:** they build real games together in Scratch, Roblox Studio (Luau),
+  Python/pygame, Godot or HTML/JS. Code is saved to a sandboxed projects folder, and Python
+  games can be run and debugged together.
+- **Music:** practice plans, theory, ear training, songwriting and beat-making.
+- **YouTube:** video ideas, scripts, titles and thumbnail ideas, editing tips, analytics, and
+  honest growth. YouTube channel owners must be 13 or older (or use a parent-managed account),
+  so Jarvis treats the channel as one your son runs with you.
+
+**Safety:**
+- He has his own database, so he can't see your memory, knowledge or files.
+- He has no shell, device, automation or email access.
+- Content is kept age-appropriate, and Jarvis reminds him about online safety.
+- If anything worrying comes up, such as bullying, someone asking for photos or his address,
+  or him seeming upset, Jarvis encourages him to talk to you and flags it. Urgent flags reach
+  you straight away by notification and email.
+- Every Sunday at 18:00 you get a short report covering what he worked on, his wins, anything
+  to keep an eye on, and suggestions for the week ahead.
+
+**On his own computer:** install Jarvis there and set `default_profile: son` in the config.
+**On a shared computer:** he says "Hey Jarvis, this is Max" (or types `/profile son`).
+Switching back to your profile needs `owner_pin`, so set one.
+**By phone:** add his number under `phone.callers` and he gets his tutor when he calls.
+
+---
+
+## Phone calls
+
+Vapi provides the phone line, speech recognition and voice. For the thinking, Vapi calls Jarvis
+on your mini PC through Vapi's "custom LLM" option, so on every call Jarvis has his full
+memory, knowledge base and tools.
+
+```
+your mobile ⇄ Vapi number ⇄ Vapi (speech ⇄ text) ⇄ https://jarvis.<your-domain> (Cloudflare Tunnel)
+                                                     ⇄ jarvis server on the mini PC ⇄ Claude
+```
+
+- **You call Jarvis.** Your number gets the full assistant. Your son's number gets his tutor.
+  Anyone else gets a receptionist that takes a message and tells you about it.
+- **Jarvis calls you** when you ask ("call me at 3 to remind me about the survey"), for
+  reminders you've set to arrive by phone call, or from automations ("call me if the generator
+  alarm triggers").
+- On calls Jarvis keeps his answers short. Commands that normally need you to confirm on screen
+  (shell commands, unlocking doors) are declined over the phone and offered for later.
+
+**Setup:** run `jarvis phone setup` for the step-by-step guide (about 15 minutes). In short:
+1. Create a Vapi account.
+2. Run `./scripts/cloudflare-tunnel.sh jarvis.<your-domain>` to give Jarvis a public address.
+3. Create a Vapi assistant with **Custom LLM** pointing to that address.
+4. Import a Twilio number (or buy one).
+5. Put the IDs in the config and set `phone.enabled: true`.
+
+To check it works, `jarvis phone test` simulates a call on the mini PC, and `jarvis phone call`
+makes Jarvis ring your mobile. Expect roughly $0.10–0.30 a minute for Vapi and telephony, plus
+Claude usage.
+
+### Running 24/7 on the mini PC
+```bash
+./scripts/install.sh
+./scripts/install-service-linux.sh          # Linux: systemd service running `jarvis server`
+./scripts/autostart-macos.sh server         # Mac mini: launchd at login
+```
+`jarvis server` runs reminders and automations for every profile, the phone line, nightly
+backups and watched-folder updates. If the mini PC has a microphone and speaker, run
+`jarvis voice --phone` instead (`install-service-linux.sh voice`).
+
+---
+
+## Things to say
+
+- "Hey Jarvis, what's the weather in Phuket this weekend?"
+- "What's the voltage drop on 40 metres of 10 mm² at 63 amps, 400 V three-phase?" (handed to the expert model)
+- "What does the anchor camera spec say about the housing material?" (answered from your documents)
+- "Prepare a quote for the Aurora refit" (follows your quotation procedure)
+- "Remind me in 20 minutes to call the shipyard." / "Every weekday at 9, remind me to check the ticket queue."
+- "Add a high-priority task: send the anchor camera spec to the client."
+- "Remember that the cinema projector is an Epson LS12000."
+- "Set the salon lights to 30 percent and put Apple TV on the main TV."
+- "Wake the media server."
+- "Every night at 23:30, turn off all the lights and tell me if any doors are unlocked."
+- "What's the latest news on Starlink maritime pricing?"
+- "How much disk space do I have left?" / "Open Visual Studio Code."
+- "Call me at 3pm to remind me about the survey." / "Every weekday at 8, call me with my briefing."
+- "This is Max" (switches to your son's tutor profile)
+- "New conversation" (clears context) · "That's all" (back to wake-word mode) · "Shut down Jarvis"
+
+In chat, type `/help` to list commands, including `/teach`, `/learn`, `/kb`, `/sources`, `/procedures`, `/memories`, `/tasks`, `/reminders`, `/automations`, `/reset` and `/quit`.
+
+---
+
+## Connecting devices
+
+### Home Assistant
+In Home Assistant, go to your Profile → Security → Long-lived access tokens and create a token.
+Then add it:
+
+```yaml
+# ~/.jarvis/config.yaml
+home_assistant:
+  url: http://homeassistant.local:8123
+```
+```bash
+# ~/.jarvis/.env
+HA_TOKEN=eyJhbGciOi…
+```
+Jarvis looks up entities itself, so "turn on the deck lights" works with no extra mapping.
+Locks and alarm panels always ask you to confirm first (`safety.confirm_ha_domains`).
+
+### AV equipment over TCP
+```yaml
+devices:
+  tcp:
+    - name: salon_matrix
+      description: 8x8 HDMI matrix in the main salon
+      host: 192.168.1.50
+      port: 23
+      line_ending: "\r\n"
+      allow_raw: false          # true lets Claude compose any protocol command
+      commands:
+        appletv_to_salon_tv: "SET SW in3 out1"
+```
+Named presets are the safe default. Turn on `allow_raw` only for devices whose command set
+Claude can't harm. Put the protocol notes in `description` so Claude knows the syntax.
+
+### HTTP actions and Wake-on-LAN
+These are covered in the commented examples in `config.yaml`. They work well with
+Node-RED, n8n, IFTTT webhooks, or any device that has a REST API.
+
+---
+
+## Safety
+
+- **Shell commands are always shown to you and need a yes** (typed, or spoken in voice mode).
+  You can turn this off with `safety.confirm_shell`, but that isn't recommended.
+- Automations run unattended, so any action that needs confirmation is automatically declined.
+- Set `safety.confirm_device_actions: true` to approve every TCP/HTTP device command.
+- All data stays on your machine in `~/.jarvis/jarvis.db`. Speech recognition and the wake
+  word run locally. Only your request text goes to Claude, and with `tts: edge`, the reply
+  text goes to Microsoft's TTS service. Use `tts: system` for fully offline speech.
+
+---
+
+## How it works
+
+```
+ mic → openWakeWord ("hey jarvis") → Recorder (energy VAD) → faster-whisper
+                                                                │ text
+                                                                ▼
+            ┌──────────────────────── Brain (Claude agent loop) ─────────────────────────┐
+            │ system prompt = persona + time + your memories                             │
+            │ tools: system · memory · tasks/reminders/automations · weather · devices   │
+            │        + Claude server-side web search                                     │
+            └──────────────────────────────────────────────┬─────────────────────────────┘
+                                                           │ reply
+                       speaker (edge-tts / say / SAPI / espeak) ◄─┘
+ Scheduler (APScheduler): due reminders → speak + notify · cron automations → forked Brain
+```
+
+```
+jarvis/
+  brain.py          agent loop, persona, teach mode, auto-recall, web-search fallback
+  knowledge.py      knowledge base: document parsers, chunking, SQLite FTS5 search
+  backup.py         nightly database backup + Markdown export
+  profiles.py       owner/child profiles, kid-safe tool list
+  household.py      one Brain + scheduler per profile, PIN-protected switching
+  phone.py          Vapi custom-LLM gateway (SSE), guest receptionist, outbound calls
+  emailer.py        SMTP for parent reports and alerts
+  scheduler.py      reminders, automations, morning briefing
+  store.py          SQLite: memories, procedures, tasks, reminders, automations, log
+  tools/            system · memory · knowledge · expert · tasks · weather · devices · kids · comms
+                    · browser (Playwright) · documents (Word/PDF/Excel)
+  voice/            audio.py (mic, VAD, Whisper, wake word) · tts.py · loop.py
+  templates/        default config.yaml and .env
+tests/              47 tests (Claude, audio, devices and Vapi mocked; phone gateway over real HTTP;
+                    browser tested in real headless Chromium; real Word/PDF/Excel files)
+```
+
+**Adding your own tool** takes a few lines in any `tools/*.py` `register()` function:
+
+```python
+@reg.tool("get_fuel_level", "Read the tender's fuel level.", {"tender": {"type": "string"}}, ["tender"])
+def get_fuel_level(ctx, tender: str):
+    return {"tender": tender, "percent": read_sensor(tender)}
+```
+
+## Costs and tuning
+
+- `claude-sonnet-5-5` is the default. Switch to `claude-haiku-5-5` for faster, cheaper replies
+  or `claude-opus-5-5` for the hardest tasks (`model.name`).
+- `ask_expert` uses Opus, which costs more per call, so Jarvis keeps it for genuinely hard questions.
+  Set `model.expert_model` to change the model it uses.
+- Web searches are billed per search. Lower the limit with `model.web_search_max_uses`.
+- If the wake word triggers when it shouldn't, raise `voice.wake_threshold` to 0.6–0.7. If it
+  misses you, lower it to 0.4.
+- For a faster response, use `voice.stt_model: tiny.en`. For more accurate transcription
+  (accents, noisy rooms), use `small.en`.
+
+## Troubleshooting
+
+`jarvis doctor` checks the config, API key, Claude connection, Home Assistant, voice libraries
+and microphone. Logs are in `~/.jarvis/jarvis.log`. Run with `-v` for verbose output.
+
+## Tests
+
+```bash
+pip install -e ".[voice,dev]" && pytest
+```

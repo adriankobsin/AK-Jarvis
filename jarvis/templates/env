@@ -1,0 +1,12 @@
+# Get a key at https://console.anthropic.com/
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional: Home Assistant long-lived access token (Profile → Security → Long-lived tokens)
+HA_TOKEN=
+
+# Optional: phone line (see `jarvis phone setup`)
+JARVIS_PHONE_SECRET=
+VAPI_API_KEY=
+
+# Optional: email (app password for the sending mailbox)
+JARVIS_SMTP_PASSWORD=

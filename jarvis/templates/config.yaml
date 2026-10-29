@@ -1,0 +1,165 @@
+# Jarvis configuration. Copy to ~/.jarvis/config.yaml (or run `jarvis init`).
+# Secrets (API keys, tokens) go in ~/.jarvis/.env, not here.
+
+assistant:
+  name: Jarvis
+  user_name: Adrian
+  honorific: sir
+  home_location: Singapore        # used for weather & briefings
+  data_dir: ~/.jarvis             # SQLite memory/knowledge DB + logs
+  expertise:                      # fields Jarvis answers as a senior expert in
+    - programming and software engineering
+    - servers, IT infrastructure and networking
+    - yachts and marine engineering
+    - technology
+    - telecommunications (satellite/VSAT, Starlink, cellular, Wi-Fi, RF)
+    - electronics and electrotechnics
+    - physics
+    - science
+    - history
+    - business
+    - economics
+
+model:
+  name: claude-sonnet-5-5         # or claude-opus-5-5 (smarter) / claude-haiku-5-5 (faster, cheaper)
+  max_tokens: 2048
+  web_search: true                # Claude's built-in web search (enable it in the Claude Console)
+  web_search_tool: web_search_20260209   # auto-falls back to web_search_20250305
+  web_search_max_uses: 5
+  history_turns: 20               # conversation turns kept in context
+  max_tool_rounds: 12
+  expert_model: claude-opus-5-5   # used by ask_expert for hard technical questions
+  expert_max_tokens: 8000
+
+voice:
+  wake_word: hey_jarvis           # built-in openWakeWord model
+  wake_threshold: 0.5             # raise (0.6-0.7) if it triggers falsely
+  stt_model: base.en              # tiny.en (fastest) | base.en | small.en (most accurate)
+  stt_device: auto                # auto | cpu | cuda
+  tts: edge                       # edge (natural, online) | system (offline) | none
+  edge_voice: en-GB-RyanNeural    # try en-GB-ThomasNeural, en-US-GuyNeural, en-AU-WilliamNeural
+  system_voice: Daniel            # macOS `say` voice for offline mode
+  follow_up_seconds: 6            # keep listening after a reply without the wake word
+  silence_seconds: 1.2
+  max_record_seconds: 20
+  chime: true
+
+briefing:
+  enabled: true
+  time: "07:30"
+  days: mon-fri                   # cron day-of-week, e.g. "*" or "mon-sat"
+  prompt: >
+    Give me my morning briefing: the date, today's weather for my home location,
+    my open tasks and today's reminders, and the top 3 news headlines relevant to
+    marine technology, superyachts and AV. Keep it under 45 seconds when spoken.
+
+# ---------------------------------------------------------------- people
+# Extra profiles. Each child gets a separate memory/knowledge database, a tutor personality and a
+# safe tool set (no shell, no devices, no access to your files or memory).
+profiles:
+  - id: son                       # used for `jarvis -p son …` and phone caller mapping
+    name: "Your son's name"       # ← change: Jarvis calls him this; say "this is <name>" to switch
+    role: child
+    age: 12                       # ← change
+    school_level: ""              # e.g. "Year 7" / "Secondary 1" / "Grade 7"
+    interests: [game development, music, his YouTube channel]
+    notes: ""                     # anything Jarvis should know (learning style, goals…)
+
+default_profile: owner            # on your son's own computer set this to: son
+owner_pin: ""                     # e.g. "4821" — needed to switch from his profile to yours
+
+parent_summary:                   # weekly report about the child's learning, emailed to you
+  enabled: true
+  day: sun
+  time: "18:00"
+
+email:                            # used for parent reports, urgent alerts and "email me …"
+  smtp_host: ""                   # e.g. smtp.office365.com (port 587) or smtp.gmail.com
+  smtp_port: 587
+  username: ""                    # the sending mailbox
+  password_env: JARVIS_SMTP_PASSWORD   # app password, set in .env
+  from: ""
+  owner_email: ""                 # where reports and alerts go
+
+# ---------------------------------------------------------------- phone (Vapi)
+# Run `jarvis phone setup` for step-by-step instructions.
+phone:
+  enabled: false
+  port: 8787
+  assistant_id: ""
+  phone_number_id: ""
+  owner_number: ""                # your mobile in +65… format — gets the full Jarvis
+  callers: {}                     # e.g. {"+6598765432": son} — your son's phone → his profile
+  filler_after_seconds: 2.5       # says "One moment" if thinking takes longer than this
+
+browser:
+  mode: jarvis                    # jarvis = Jarvis's own Chrome window with a saved profile (log in once)
+                                  # cdp    = attach to a Chrome you started with --remote-debugging-port=9222
+  headless: false                 # keep the window visible so you can watch and take over
+  channel: ""                     # "chrome" to drive your installed Google Chrome instead of Chromium
+
+knowledge:
+  # Folders Jarvis keeps learning from automatically (new/changed files re-read, deleted ones
+  # forgotten). A SharePoint/OneDrive library synced to your Mac works well here.
+  watch_folders: []
+  #  - path: ~/Library/CloudStorage/OneDrive-WaveAVI/Engineering
+  #    topic: engineering
+  #  - path: ~/Documents/Datasheets
+  #    topic: datasheets
+  rescan_minutes: 30
+  auto_recall: true               # pull relevant excerpts into every request automatically
+  auto_recall_results: 4
+  max_file_mb: 25
+
+backup:
+  enabled: true                   # nightly copy of everything Jarvis knows
+  time: "03:15"
+  folder: ""                      # default ~/.jarvis/backups — a OneDrive folder gives off-machine copies
+  keep: 14
+
+safety:
+  confirm_shell: true             # ask before every shell command (strongly recommended)
+  confirm_ha_domains: [lock, alarm_control_panel]
+  confirm_device_actions: false   # ask before HTTP/TCP device commands
+  shell_timeout: 60
+
+home_assistant:
+  url: ""                         # e.g. http://homeassistant.local:8123
+  token_env: HA_TOKEN             # long-lived access token, set in .env
+  verify_ssl: true
+
+devices:
+  # Pre-defined HTTP calls (webhooks, device REST APIs, Node-RED, IFTTT…)
+  http: []
+  #  - name: cinema_scene
+  #    description: Set the cinema room to movie mode
+  #    method: POST
+  #    url: http://192.168.1.20:1880/cinema/movie
+  #    json: {source: appletv}
+
+  # Raw TCP control of AV gear (HDMI matrices, DSPs, projectors, amps, Crestron/Extron ASCII…)
+  tcp: []
+  #  - name: salon_matrix
+  #    description: 8x8 HDMI matrix in the main salon
+  #    host: 192.168.1.50
+  #    port: 23
+  #    line_ending: "\r\n"
+  #    allow_raw: false              # true = Claude may send any protocol command
+  #    commands:
+  #      appletv_to_salon_tv: "SET SW in3 out1"
+  #      sky_to_all: "SET SW in1 all"
+  #  - name: cinema_projector
+  #    description: Projector via PJLink class 1
+  #    host: 192.168.1.60
+  #    port: 4352
+  #    line_ending: "\r"
+  #    commands:
+  #      power_on: "%1POWR 1"
+  #      power_off: "%1POWR 0"
+
+  # Wake-on-LAN targets
+  wol: []
+  #  - name: media_server
+  #    description: Plex server in the rack
+  #    mac: "AA:BB:CC:DD:EE:FF"
+  #    broadcast: 192.168.1.255
