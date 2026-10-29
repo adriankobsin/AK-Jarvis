@@ -96,15 +96,69 @@ web:
   enabled: true                   # web app at http://<mini-pc>:8788 — password: JARVIS_WEB_PASSWORD in .env
   port: 8788
 
-cameras: []                      # IP cameras Jarvis can look at, e.g.:
-#  - name: anchor_pocket
-#    description: Bow anchor pocket, starboard
+# ---------------------------------------------------------------- cameras
+# Any camera. Phones, tablets and laptops running the Jarvis app can also share their camera
+# from the Camera page ("Share with Jarvis") without any config.
+cameras: []
+#  - name: desk_webcam              # USB webcam on the machine Jarvis runs on
+#    usb: 0                         # device index (or /dev/video2)
+#  - name: engine_room              # CCTV / NVR / IP camera stream (needs ffmpeg)
+#    rtsp_url: rtsp://192.168.1.81:554/stream1
+#    username: admin
+#    password_env: CAM_ENGINE_PASSWORD
+#  - name: anchor_pocket            # IP camera JPEG snapshot URL
 #    snapshot_url: http://192.168.1.80/cgi-bin/snapshot.cgi
 #    username: admin
 #    password_env: CAM_ANCHOR_PASSWORD
 #    auth: digest
-#  - name: aft_deck
+#  - name: aft_deck                 # any Home Assistant camera
 #    ha_entity: camera.aft_deck
+
+# ---------------------------------------------------------------- building systems
+# Points are named values with units/scaling; drivers also expose commands (scenes, buttons…).
+# Writes ask for approval unless a point says confirm: false. Secrets go in .env (*_env keys).
+integrations: []
+#  - name: engine_room_plc
+#    type: modbus                   # Modbus TCP (or serial_port: /dev/ttyUSB0 + baudrate for RTU)
+#    host: 192.168.20.10
+#    port: 502
+#    unit: 1
+#    points:
+#      - {name: generator_1_load, register: 40011, scale: 0.1, units: kW, writable: false}
+#      - {name: fuel_tank_port, table: input, address: 4, units: "%"}
+#      - {name: engine_room_temp, table: holding, address: 20, datatype: float32, units: "°C"}
+#      - {name: hvac_setpoint, table: holding, address: 30, scale: 0.1, units: "°C", min: 16, max: 28}
+#      - {name: bilge_alarm, table: discrete, address: 0}
+#  - name: salon_lighting
+#    type: lutron                   # RadioRA 2 / HomeWorks QS / Quantum (telnet integration)
+#    host: 192.168.20.20
+#    username: lutron
+#    password_env: LUTRON_PASSWORD
+#    points:
+#      - {name: salon_downlights, output: 25, units: "%", confirm: false}
+#      - {name: salon_blinds, output: 41, units: "%"}
+#    buttons:                       # keypad buttons (device ID + button number from the integration report)
+#      - {name: evening, device: 10, button: 3}
+#  - name: crestron_home
+#    type: crestron_home            # Crestron Home REST API (enable Web API, copy the token)
+#    host: 192.168.20.30
+#    token_env: CRESTRON_TOKEN
+#    points:
+#      - {name: aft_deck_lights, light: "Aft Deck Downlights", units: "%"}
+#      - {name: sky_lounge_shades, shade: "Sky Lounge Shades", units: "%"}
+#  - name: av_processor
+#    type: crestron_tcp             # your own SIMPL/C# program, or any ASCII device (type: tcp)
+#    host: 192.168.20.31
+#    port: 50001
+#    commands: {cinema_on: "CINEMA_ON", all_off: "ALL_OFF"}
+#    points:
+#      - {name: salon_volume, query: "GET VOL SALON", reply: "VOL SALON (\\d+)", set: "SET VOL SALON {value}"}
+#  - name: weather_station
+#    type: rest                     # anything with an HTTP/JSON API
+#    base_url: http://192.168.20.40/api
+#    headers: {Authorization: "Bearer ${ENV:WEATHER_TOKEN}"}
+#    points:
+#      - {name: wind_speed, path: /current, json_path: wind.speed, units: kn}
 
 browser:
   mode: jarvis                    # jarvis = Jarvis's own Chrome window with a saved profile (log in once)

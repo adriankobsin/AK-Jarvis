@@ -113,8 +113,32 @@
   }
   const MEDIA = [{ id: "m1", source: "demo:drawing", title: "Anchor camera bracket drawing", kind: "image", auto: true, ts: inHours(-2) },
                  { id: "m2", source: "/Users/adrian/Documents/Quotes/QUOTE-Aurora-2026-10-29.docx", title: "QUOTE-Aurora-2026-10-29.docx", kind: "file", auto: false, ts: inHours(-1) }];
-  const CAMERAS = [{ name: "anchor_pocket", description: "Bow anchor pocket, starboard", source: "snapshot_url" }, { name: "aft_deck", description: "Aft deck and swim platform (IR)", source: "home_assistant" }];
+  const CAMERAS = [{ name: "anchor_pocket", description: "Bow anchor pocket, starboard (RTSP)", source: "rtsp", live: true }, { name: "aft_deck", description: "Aft deck and swim platform (IR)", source: "home_assistant", live: true }, { name: "bridge_tablet", description: "Shared from the bridge tablet", source: "shared", live: true }];
   const RUNS = [];
+  /* ---- simulated building systems ---- */
+  const INTS = [
+    { name: "engine_room_plc", type: "modbus", description: "Engine room PLC: generators, tanks, bilge", status: { online: true },
+      points: [{ name: "generator_1_load", units: "kW", writable: false, description: "Genset 1 output" }, { name: "generator_2_load", units: "kW", writable: false },
+               { name: "fuel_tank_port", units: "%", writable: false }, { name: "engine_room_temp", units: "°C", writable: false }, { name: "hvac_setpoint", units: "°C", writable: true, min: 16, max: 28 }, { name: "bilge_alarm", units: "", writable: false }],
+      commands: [{ name: "read_registers", description: "Read raw registers", params: { table: "holding", address: 0, count: 10 }, writes: false }] },
+    { name: "salon_lighting", type: "lutron", description: "RadioRA 2 main repeater", status: { online: true },
+      points: [{ name: "salon_downlights", units: "%", writable: true }, { name: "salon_cove", units: "%", writable: true }, { name: "salon_blinds", units: "%", writable: true }],
+      commands: [{ name: "press_button", description: "Press a keypad button (scene)", params: { button: "evening" }, writes: true, buttons: [{ name: "welcome" }, { name: "evening" }, { name: "cinema" }, { name: "all_off" }] }] },
+    { name: "crestron_home", type: "crestron_home", description: "Crestron Home CP4-R, main deck", status: { online: true },
+      points: [{ name: "aft_deck_lights", units: "%", writable: true }, { name: "sky_lounge_shades", units: "%", writable: true }],
+      commands: [{ name: "recall_scene", description: "Recall a Crestron Home scene", params: { scene: "Sunset" }, writes: true }, { name: "list", description: "List rooms, scenes, lights…", params: { what: "scenes" }, writes: false }] },
+    { name: "av_matrix", type: "crestron_tcp", description: "16x16 HDMI matrix (ASCII over TCP)", status: { online: false, error: "Can't reach 192.168.20.31:23" },
+      points: [{ name: "salon_tv_source", units: "", writable: true }], commands: [{ name: "preset", description: "Send a named preset", params: { preset: "apple_tv_to_salon" }, writes: true, presets: ["apple_tv_to_salon", "sky_to_all"] }] },
+  ];
+  const VALS = { generator_1_load: 72.3, generator_2_load: 0, fuel_tank_port: 64, engine_room_temp: 38.5, hvac_setpoint: 22, bilge_alarm: false,
+                 salon_downlights: 60, salon_cove: 40, salon_blinds: 100, aft_deck_lights: 0, sky_lounge_shades: 75, salon_tv_source: "Apple TV" };
+  const PROGS = [
+    { name: "generator-load-watch", description: "Alert if either generator goes above 85% of rated load for more than 2 minutes", mode: "service", schedule: "", deployed: true, status: "running", running: true, last_run: inHours(-30), last_test: inHours(-31), last_test_ok: true,
+      code: 'from jarvis import sdk\n\nRATED_KW = 99\nLIMIT = 0.85\n\ndef check():\n    for g in ("generator_1_load", "generator_2_load"):\n        kw = sdk.read("engine_room_plc", g)\n        over = kw > RATED_KW * LIMIT\n        since = sdk.get_state(g)\n        if over and since is None:\n            sdk.set_state(g, time.time())\n        elif over and time.time() - since > 120:\n            sdk.alert("Generator load", f"{g}: {kw} kW for over 2 minutes")\n        elif not over:\n            sdk.set_state(g, None)\n\nsdk.every(15, check)\n',
+      log: "[deployed]\ngenerator_1_load 72.3 kW · generator_2_load 0.0 kW\ngenerator_1_load 73.1 kW · generator_2_load 0.0 kW" },
+    { name: "sunset-shades", description: "Every evening at 18:45, close the sky lounge shades and recall the Sunset scene", mode: "schedule", schedule: "45 18 * * *", deployed: true, status: "scheduled", running: false, last_run: inHours(-25), last_test: inHours(-50), last_test_ok: true,
+      code: 'from jarvis import sdk\n\nsdk.write("crestron_home", "sky_lounge_shades", 0)\nsdk.command("crestron_home", "recall_scene", scene="Sunset")\nsdk.log("evening routine done")\n', log: "[deployed]\nevening routine done" },
+  ];
   let runSeq = 0;
   function activity(e) { DEMO.onEvent && DEMO.onEvent({ type: "activity", event: { channel: "local", profile: current, ts: Date.now() / 1000, ...e } }); }
 
@@ -140,7 +164,7 @@
     const [p, query] = path.split("?");
     const qs = new URLSearchParams(query || "");
     const m = (re) => p.match(re);
-    if (p === "/api/state") return { assistant: "Jarvis", version: "1.5.0", model: "claude-sonnet-5-5", profile: people[current], profiles: Object.values(people), mode, phone_enabled: true, alerts: [] };
+    if (p === "/api/state") return { assistant: "Jarvis", version: "1.6.0", model: "claude-sonnet-5-5", profile: people[current], profiles: Object.values(people), mode, phone_enabled: true, alerts: [] };
     if (p === "/api/history") return d.log.slice(-40);
     if (p === "/api/login" || p === "/api/logout") return { ok: true };
     if (p === "/api/profile") {
@@ -218,7 +242,9 @@
       const next = (h) => new Date(Date.now() + h * 3600e3).toISOString();
       return { runs: RUNS.slice(-8), tasks: d.tasks.filter(t => !t.done), reminders: d.reminders.slice().sort((a, b) => a.due_at.localeCompare(b.due_at)),
         automations: d.automations.map((a, i) => ({ ...a, next_run: next(i ? 15.5 : 11.2) })), media: MEDIA.slice(-6),
-        browser_active: true, cameras: current === "owner" ? CAMERAS : [] };
+        browser_active: true, cameras: current === "owner" ? CAMERAS : [],
+        integrations: current === "owner" ? INTS.map(i => ({ name: i.name, type: i.type, online: i.status.online })) : [],
+        programs: current === "owner" ? PROGS.map(x => ({ name: x.name, mode: x.mode, status: x.status, deployed: x.deployed, running: x.running, next_run: x.mode === "schedule" ? new Date(Date.now() + 5.5 * 3600e3).toISOString() : null })) : [] };
     }
     if (p === "/api/vitals") {
       const busy = RUNS.some(r => r.status === "running");
@@ -237,15 +263,45 @@
       if (body.action === "open") { BROWSER.url = body.url.includes("://") ? body.url : "https://" + body.url; BROWSER.title = BROWSER.url.replace(/^https?:\/\//, ""); BROWSER.step = 0; }
       return { url: BROWSER.url, title: BROWSER.title };
     }
+    if (p === "/api/integrations") return INTS;
+    if (m(/^\/api\/integrations\/([^/]+)\/values$/)) {
+      const it = INTS.find(i => i.name === decodeURIComponent(p.split("/")[3]));
+      if (!it.status.online) return err("Can't reach the system");
+      VALS.generator_1_load = Math.round((70 + Math.random() * 6) * 10) / 10; VALS.engine_room_temp = Math.round((38 + Math.random()) * 10) / 10;
+      return it.points.map(pt => ({ point: pt.name, value: VALS[pt.name], units: pt.units }));
+    }
+    if (m(/^\/api\/integrations\/([^/]+)\/write$/)) { VALS[body.point] = body.value; return { point: body.point, written: body.value }; }
+    if (m(/^\/api\/integrations\/([^/]+)\/command$/)) {
+      if (body.command === "list") return [{ id: 1, name: "Welcome" }, { id: 2, name: "Sunset" }, { id: 3, name: "Night" }];
+      if (body.command === "read_registers") return { table: "holding", start: 0, values: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0] };
+      return { ok: true, sent: body.command, params: body.params };
+    }
+    if (m(/^\/api\/integrations\/([^/]+)\/discover$/)) return { rooms: [{ id: 1, name: "Main Salon" }, { id: 2, name: "Sky Lounge" }, { id: 3, name: "Aft Deck" }], scenes: [{ id: 11, name: "Welcome" }, { id: 12, name: "Sunset" }, { id: 13, name: "Night" }] };
+    if (p === "/api/programs" && method === "GET") return PROGS;
+    if (p === "/api/programs") {
+      const ex = PROGS.find(x => x.name === body.name);
+      if (!/^[a-z0-9][a-z0-9_-]{1,40}$/.test(body.name || "")) return err("Program names use lowercase letters, digits, - and _");
+      if (ex) Object.assign(ex, body, { deployed: false, status: "stopped", running: false }); else PROGS.push({ ...body, deployed: false, status: "draft", running: false, log: "" });
+      return { saved: body.name, syntax_error: null, note: ex ? "Saved. It was running, so it has been stopped: test and deploy again." : "Saved." };
+    }
+    if (m(/^\/api\/programs\/([^/]+)$/)) { const pr = PROGS.find(x => x.name === decodeURIComponent(p.split("/")[3])); return { ...pr, log: pr.log || "(no output yet)" }; }
+    if (m(/^\/api\/programs\/([^/]+)\/(test|deploy|stop)$/)) {
+      const [, , , nm, act] = p.split("/"); const pr = PROGS.find(x => x.name === decodeURIComponent(nm));
+      if (act === "test") { await sleep(900); pr.last_test = iso(new Date()); pr.last_test_ok = true; pr.log += "\n[test] ok"; return { ok: true, exit_code: 0, ran_for_s: 1.2, output: "generator_1_load 72.9 kW · generator_2_load 0.0 kW\n(demo output)" }; }
+      if (act === "deploy") Object.assign(pr, { deployed: true, status: pr.mode === "schedule" ? "scheduled" : "running", running: pr.mode === "service" });
+      if (act === "stop") Object.assign(pr, { deployed: false, status: "stopped", running: false });
+      return { ok: true };
+    }
+    if (p === "/api/cameras/share") return { ok: true, name: "device" };
     if (p === "/api/phone/messages") return owner.phone;
     if (p === "/api/phone/call") return err("In the demo Jarvis can't ring your phone. On your Jarvis this places a real call through Vapi.");
     if (p === "/api/system") {
       const tools = current === "owner" ? TOOLS.owner : TOOLS.kid;
       return {
-        version: "1.5.0", model: "claude-sonnet-5-5", expert_model: "claude-opus-5-5", web_search: true,
+        version: "1.6.0", model: "claude-sonnet-5-5", expert_model: "claude-opus-5-5", web_search: true,
         tools, tool_count: Object.values(tools).reduce((a, v) => a + v.length, 0),
         counts: { memories: d.memories.length, procedures: d.procedures.length, open_tasks: d.tasks.filter(t => !t.done).length, reminders: d.reminders.length, automations: d.automations.length, knowledge_sources: d.sources.length },
-        integrations: { claude_api: true, home_assistant: true, phone: true, email: true, watched_folders: 2, browser: true, voice: true, cameras: true },
+        integrations: { claude_api: true, home_assistant: true, phone: true, email: true, watched_folders: 2, browser: true, voice: true, cameras: true, integrations: INTS.length },
         profiles: Object.values(people),
       };
     }
@@ -276,6 +332,30 @@
     const t = text.toLowerCase();
     await sleep(400);
 
+    if (/program|automate|watch .* alarm|whenever/.test(t) && current === "owner") {
+      await tool("integrations_overview", {});
+      await tool("integration_read", { integration: "engine_room_plc", point: "bilge_alarm" }, 500);
+      await tool("write_program", { name: "bilge-alarm-watch", mode: "service" }, 1200);
+      const code = 'from jarvis import sdk\n\ndef check():\n    if sdk.read("engine_room_plc", "bilge_alarm"):\n        if not sdk.get_state("alerted", False):\n            sdk.alert("Bilge alarm", "High-water alarm in the engine room")\n            sdk.set_state("alerted", True)\n    else:\n        sdk.set_state("alerted", False)\n\nsdk.every(5, check)\n';
+      if (!PROGS.find(x => x.name === "bilge-alarm-watch")) PROGS.push({ name: "bilge-alarm-watch", description: "Alert immediately when the engine-room bilge alarm turns on (once per event)", mode: "service", schedule: "", deployed: false, status: "draft", running: false, code, log: "" });
+      await tool("test_program", { name: "bilge-alarm-watch" }, 600);
+      const ok = await approve("Deploy program 'bilge-alarm-watch' to run continuously (tested OK): Alert immediately when the engine-room bilge alarm turns on");
+      if (ok) { await tool("deploy_program", { name: "bilge-alarm-watch" }, 400); Object.assign(PROGS.find(x => x.name === "bilge-alarm-watch"), { deployed: true, status: "running", running: true, last_test_ok: true, last_test: iso(new Date()) }); }
+      return reply(ok ? "Done. **bilge-alarm-watch** is running. It checks the engine-room PLC every 5 seconds and alerts you once each time the bilge alarm turns on. You'll find it on the Programs page with its code and live log."
+        : "No problem, I haven't deployed it. The program is saved and tested on the Programs page if you want to look it over first.");
+    }
+    if (/generator|genset|tank|engine room|plc/.test(t) && current === "owner") {
+      await tool("integration_read", { integration: "engine_room_plc" }, 700);
+      return reply(`Engine room status:\n\n| Point | Value |\n|---|---|\n| Generator 1 | ${VALS.generator_1_load} kW |\n| Generator 2 | off |\n| Port fuel tank | ${VALS.fuel_tank_port}% |\n| Engine room | ${VALS.engine_room_temp} °C |\n| Bilge alarm | ${VALS.bilge_alarm ? "**ON**" : "clear"} |\n\nGenerator 1 is carrying the load at about 73% of rating, which is normal for this time of day.`);
+    }
+    if (/light|scene|shade|blind|evening|cinema/.test(t) && current === "owner") {
+      await tool("integrations_overview", {}, 400);
+      await tool("integration_command", { integration: "salon_lighting", command: "press_button", button: "evening" }, 600);
+      const ok = await approve("salon_lighting: press_button {\"button\": \"evening\"}");
+      if (!ok) return reply("Okay, I've left the lighting as it is.");
+      VALS.salon_downlights = 35; VALS.salon_cove = 60; VALS.salon_blinds = 0;
+      return reply("Evening scene is on in the salon: downlights at 35%, cove at 60%, and the blinds are closing.");
+    }
     if (body.image) {
       await tool("look_at_image", { question: text }, 900);
       return reply("In this demo I can't actually see your photo. On your own Jarvis, Claude looks at the image and answers. It can read a gauge, check a wiring panel, identify a part, or help with the maths worksheet in front of you.");

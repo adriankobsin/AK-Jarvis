@@ -49,7 +49,8 @@ def register(reg, config) -> None:
 
     @reg.tool(
         "list_cameras",
-        "List the IP cameras Jarvis can look at (CCTV, anchor pocket, doors, engine room...).",
+        "List every camera Jarvis can look at: cameras shared from phones/tablets/laptops running the "
+        "Jarvis app, USB webcams on this machine, CCTV/RTSP streams, IP and Home Assistant cameras.",
     )
     def list_cameras_tool(ctx):
         from ..cameras import list_cameras
@@ -58,7 +59,8 @@ def register(reg, config) -> None:
 
     @reg.tool(
         "look_at_camera",
-        "Take a snapshot from an IP camera and look at it, so you can describe what you see, "
+        "Take a picture from any camera (shared device camera, webcam, CCTV, IP camera) and look at it, "
+        "so you can describe what you see, "
         "check on something (is the anchor secure? is anyone at the door? is the deck clear?), "
         "or read displays and gauges.",
         {"name": {"type": "string"}},
@@ -75,6 +77,3 @@ def register(reg, config) -> None:
                 {"type": "image", "source": {"type": "base64", "media_type": ctype,
                                              "data": base64.b64encode(data).decode()}}]
 
-    if not config.get("cameras"):
-        for n in ("list_cameras", "look_at_camera"):
-            reg._tools.pop(n, None)

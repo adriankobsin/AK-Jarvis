@@ -74,6 +74,7 @@ DEFAULTS: dict[str, Any] = {
         "confirm_shell": True,
         "confirm_ha_domains": ["lock", "alarm_control_panel"],
         "confirm_device_actions": False,
+        "confirm_integration_writes": True,   # ask before writing to Crestron/Lutron/Modbus/REST (per-point confirm: false overrides)
         "shell_timeout": 60,
     },
     "profiles": [],            # extra people, e.g. children — see templates/config.yaml
@@ -105,6 +106,8 @@ DEFAULTS: dict[str, Any] = {
         "password_env": "JARVIS_WEB_PASSWORD",   # owner login for the web UI
         "session_days": 30,
     },
+    "integrations": [],            # building systems: crestron_home, crestron_tcp, lutron, modbus, rest, tcp
+    "programs": {"enabled": True, "max_restarts": 5, "test_timeout": 30},
     "cameras": [],                 # IP cameras Jarvis can look at — see templates/config.yaml
     "browser": {
         "mode": "jarvis",          # jarvis = own persistent Chrome profile; cdp = attach to a running Chrome

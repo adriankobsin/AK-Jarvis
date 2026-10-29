@@ -20,6 +20,8 @@ on your computer, your smart home and your AV equipment.
 | 🌐 **Browser** | Runs his own Chrome window that you can watch: opens sites, reads pages, fills in online forms and applications, uploads files, takes screenshots. Asks your approval before anything is submitted, paid or sent |
 | 📄 **Documents** | Fills in Word templates (placeholders, blanks, tables, headers), PDF forms and Excel sheets, and drafts new Word documents. The original file is never overwritten |
 | 🖥️ **Web app** | A futuristic control centre in any browser, including your phone. The animated core reacts to his voice. A live operations panel shows each step of every task he's running (from chat, voice, phone or automations), alongside a mission queue, system vitals and status lights. You get a live view of his browser that you can drive, a media player, your phone or laptop camera and IP cameras he can look at, and a real voice with hands-free conversation mode and a "Jarvis" wake word |
+| 🏗️ **Integrations** | Crestron (Crestron Home REST API, or TCP strings to your own SIMPL/C# programs), Lutron (RadioRA 2, HomeWorks QS, Quantum), Modbus TCP/RTU (PLCs, generators, meters, HVAC), any REST API and any ASCII/TCP device. Live values, control, scenes and discovery, from chat or the Integrations page |
+| ⌘ **Programs** | Jarvis writes, tests and deploys his own control programs (watch alarms, react to sensors, sync systems, log data). They run continuously or on a schedule, are supervised and restarted if they crash, and are never deployed without your approval |
 | 💻 **Computer** | Open apps and URLs, run shell commands (only after you confirm), set volume, check system status, show notifications |
 
 ---
@@ -136,7 +138,8 @@ like an app.
 | **Operations** | Live runs with step-by-step progress and timings, the mission queue (tasks, reminders with countdowns, upcoming automations), CPU, memory and disk gauges with a CPU history line, status lights, and browser and camera feeds |
 | **Browser** | A live view of Jarvis's browser. Type an address, click on the page, type, scroll, go back. A "Jarvis is driving" badge shows when he's using it. On a mini PC without a screen, the browser runs in the background and you watch it here |
 | **Media** | Anything Jarvis puts on screen ("play…", "show me…"), such as YouTube, video, audio, images, PDFs and camera stills, plus the documents he creates |
-| **Camera** | Point your phone or laptop camera at something (or upload a photo) and ask Jarvis about it. View your IP cameras and ask him to check one |
+| **Camera** | Point this device's camera at something (or upload a photo) and ask Jarvis about it. **Share with Jarvis** keeps any phone, tablet or laptop available as a camera he can look through. Every camera is listed here: shared devices, USB webcams, CCTV/RTSP streams, IP and Home Assistant cameras |
+| **Integrations / Programs** | Live building-system values and controls, plus the control programs Jarvis has written and deployed (see below) |
 | **Memory** | Search, add, edit or remove facts. Instructions and corrections are listed first because they're always applied |
 | **Knowledge** | Upload documents, write notes, add web pages, search everything Jarvis knows and read any source |
 | **Procedures** | View and edit the step-by-step ways you do things |
@@ -146,7 +149,7 @@ like an app.
 | **Family** | Switch to your son's tutor profile. Switching back needs the PIN |
 | **How it's built** | The architecture, every tool grouped by area, integration status, and a download of everything Jarvis knows |
 
-**IP cameras** (for example the anchor-pocket camera) go in the config:
+**Cameras:** any phone, tablet or laptop running the app can share its camera from the Camera page. Fixed cameras go in the config:
 ```yaml
 cameras:
   - name: anchor_pocket
@@ -157,6 +160,10 @@ cameras:
     auth: digest                        # or basic
   - name: aft_deck
     ha_entity: camera.aft_deck          # or any Home Assistant camera
+  - name: engine_room
+    rtsp_url: rtsp://192.168.1.81:554/stream1   # any CCTV/NVR stream (uses ffmpeg)
+  - name: desk_webcam
+    usb: 0                              # a webcam plugged into the Jarvis machine
 ```
 Jarvis gets `look_at_camera` and can answer questions like "Is the anchor secure?" by looking at a live snapshot.
 The browser camera and microphone need HTTPS or `localhost`. Through the Cloudflare Tunnel you get HTTPS automatically.
@@ -195,6 +202,50 @@ with a separate profile, which in practice works the same as Jarvis's own window
 Each result is saved next to the original as `name-filled.docx` (or `.pdf`, `.xlsx`), and
 Jarvis tells you anything he couldn't fill. PDFs that are just scans have no fields to fill.
 For those, Jarvis can draft the answers for you to copy across.
+
+---
+
+## Building systems and programs
+
+Jarvis connects to the control systems on a vessel, in a home or across a building, and can
+**program** them as well as operate them.
+
+| Type | Systems | What you get |
+|---|---|---|
+| `crestron_home` | Crestron Home (CP4-R etc.) through its REST API | rooms, scenes (recall), lights, shades, thermostats and sensors |
+| `crestron_tcp` / `tcp` | Your own Crestron SIMPL/C# program, Extron, Kramer, matrices, DSPs, projectors | named presets, plus points defined by query, reply and set strings |
+| `lutron` | RadioRA 2, HomeWorks QS, Quantum, Caséta Pro (telnet integration) | outputs (dimmers, shades, switches) and keypad button presses |
+| `modbus` | PLCs, generators, power meters, tank sensors, HVAC, BMS (TCP or RTU serial) | holding, input, coil and discrete points with int16/32, float32, scaling and units |
+| `rest` | Gateways, inverters, weather stations, Node-RED, cloud APIs | points via JSON paths, plus named requests |
+
+Set them up under `integrations:` in the config (the template has a worked example for each
+type). Then ask in plain language:
+- "What's the status of the engine room?"
+- "Put the salon in evening mode."
+- "Close the sky lounge shades."
+- "Read registers 0–20 on the engine PLC."
+- "Discover what's on the Crestron Home system and suggest points to add."
+
+Any change asks for your approval first, unless you mark a point `confirm: false`, which suits
+everyday lighting. The **Integrations** page shows live values, sliders and controls, every
+command, and Discover.
+
+**Programs** are automation logic that keeps running without you. Say "Write a program that
+alerts me whenever the bilge alarm goes on" or "Every evening at 18:45, close the sky lounge
+shades and recall the Sunset scene". Jarvis then:
+1. writes a small Python program using `jarvis.sdk` (`read`, `write`, `command`, `alert`, `log`,
+   `get_state`/`set_state`, `every`);
+2. test-runs it (with your OK) and shows you the output;
+3. deploys it once you approve.
+
+A program runs in one of three ways:
+- **Service:** runs continuously, and is restarted if it crashes.
+- **Schedule:** runs on a cron schedule.
+- **Once:** runs a single time.
+
+Alerts from programs reach you in the app, out loud and as notifications. The **Programs**
+page shows each program's status, code and live log, with Test, Deploy, Stop and Edit buttons.
+Deployed programs start again automatically when Jarvis restarts.
 
 ---
 
@@ -371,6 +422,9 @@ jarvis/
   household.py      one Brain + scheduler per profile, PIN-protected switching
   phone.py          Vapi custom-LLM gateway (SSE), guest receptionist, outbound calls
   emailer.py        SMTP for parent reports and alerts
+  integrations/     drivers: modbus · lutron · crestron (home REST + TCP) · rest; manager
+  programs.py       write/test/deploy/supervise control programs   sdk.py  the programs' API
+  cameras.py        any camera: shared devices, USB, RTSP, snapshot URL, Home Assistant
   web/server.py     FastAPI backend: streaming chat (SSE), approvals, management API, voice
   web/static/       the single-page web app (no build step)
   scheduler.py      reminders, automations, morning briefing
@@ -379,7 +433,7 @@ jarvis/
                     · browser (Playwright) · documents (Word/PDF/Excel)
   voice/            audio.py (mic, VAD, Whisper, wake word) · tts.py · loop.py
   templates/        default config.yaml and .env
-tests/              55 tests (Claude, audio, devices and Vapi mocked; phone gateway over real HTTP;
+tests/              65 tests (incl. a real Modbus server, fake Lutron, Crestron Home and TCP devices) (Claude, audio, devices and Vapi mocked; phone gateway over real HTTP;
                     browser tested in real headless Chromium; real Word/PDF/Excel files)
 ```
 

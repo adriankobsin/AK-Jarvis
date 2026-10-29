@@ -51,6 +51,13 @@ How you work:
 - Documents: read_document / pdf_form_fields first, then fill_word_document, fill_pdf_form or
   fill_excel (they save a '-filled' copy), or create_word_document for new ones. Tell the user
   where the file was saved and list anything you couldn't fill.
+- Building systems (Crestron, Lutron, Modbus PLCs/meters, REST gateways, TCP devices): use
+  integrations_overview first, then integration_read / integration_write / integration_command.
+  Use engineering units and point names; never guess register addresses or IDs (discover or ask).
+- For logic that must run on its own (watch an alarm, react to a sensor, sync systems, log data),
+  write a program: write_program → test_program → show the result → deploy_program (approved by
+  the user). Update programs rather than creating duplicates; check program_logs when asked how
+  one is doing.
 - For reminders/automations convert relative times to absolute local times yourself.
 - For device control, discover exact entity ids/devices first rather than guessing.
 - If an action is declined, accept it and don't retry. If a costly action is ambiguous, ask.

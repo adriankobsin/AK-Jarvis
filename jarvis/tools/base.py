@@ -89,12 +89,12 @@ class ToolRegistry:
 
 def build_registry(config) -> ToolRegistry:
     """Assemble every tool module into one registry."""
-    from . import (browser, comms, devices, documents, expert, kids, knowledge, media, memory,
-                   system, tasks, weather)
+    from . import (browser, comms, devices, documents, expert, integrations, kids, knowledge, media,
+                   memory, programs, system, tasks, weather)
 
     reg = ToolRegistry()
     for mod in (system, memory, knowledge, expert, tasks, weather, devices, kids, comms,
-                browser, documents, media):
+                browser, documents, media, integrations, programs):
         mod.register(reg, config)
     role = (config.get("profile") or {}).get("role", "owner")
     if role == "child":

@@ -54,11 +54,17 @@ class Household:
                   on_tool=on_tool, kb=kb)
         b.ctx.extras["activity"] = lambda e: self.activity_sink and self.activity_sink(e)
         b.ctx.extras["media"] = lambda item: self._show_media(item)
+        if not prof.is_child:
+            b.ctx.extras["program_alert"] = lambda t, m: self.alert(t, m)
         if prof.is_child:
             b.ctx.extras["parent_alert"] = lambda text, p=prof: self._parent_alert(p, text)
         self.brains[pid] = b
         if self.start_schedulers:
             self._start_scheduler(pid, b)
+            if not prof.is_child and pcfg.get("programs", {}).get("enabled", True):
+                from .programs import get_program_manager
+
+                get_program_manager(pcfg, lambda t, m: self.alert(t, m)).restore()
         return b
 
     def _start_scheduler(self, pid: str, b: Brain) -> None:
@@ -108,6 +114,10 @@ class Household:
     def shutdown(self) -> None:
         for s in self.schedulers.values():
             s.shutdown()
+        from .programs import _managers
+
+        for pm in list(_managers.values()):
+            pm.shutdown()
 
     # ------------------------------------------------------------------
     def resolve_switch(self, current: str, text: str, pin: str | None = None) -> tuple[str | None, str]:

@@ -552,6 +552,7 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
                 "email": bool(cfg["email"].get("smtp_host")),
                 "watched_folders": len(cfg["knowledge"].get("watch_folders") or []),
                 "browser": _has("playwright"), "voice": _has("faster_whisper") and _has("edge_tts"),
+                "integrations": len(cfg.get("integrations") or []),
             },
             "profiles": [{"id": p.id, "name": p.name, "role": p.role} for p in web.hh.profiles.values()],
         }
@@ -590,6 +591,8 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
             "media": list(web.media_items)[-12:],
             "browser_active": _browser_active(web),
             "cameras": [] if web.is_child(s) else __import__("jarvis.cameras", fromlist=["x"]).list_cameras(cfg),
+            "integrations": [] if web.is_child(s) else _integration_status(web),
+            "programs": [] if web.is_child(s) else _program_summary(web),
         }
 
     @app.get("/api/vitals")
@@ -721,6 +724,115 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
             raise HTTPException(502, f"Camera {name}: {e}") from e
         return Response(data, media_type=ctype, headers={"Cache-Control": "no-store"})
 
+    @app.post("/api/cameras/share")
+    def camera_share(body: dict, s: Session = Depends(auth)):
+        """A device running the app shares its camera: it posts a frame every few seconds."""
+        import base64 as b64
+
+        from ..cameras import share_frame
+
+        img = str(body.get("image", ""))
+        ctype = "image/jpeg"
+        if img.startswith("data:"):
+            head, img = img.split(",", 1)
+            ctype = head[5:].split(";")[0] or ctype
+        try:
+            data = b64.b64decode(img, validate=True)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(400, "Bad image.") from e
+        if len(data) > 3 * 2**20:
+            raise HTTPException(413, "Frame too large.")
+        name = share_frame(str(body.get("name") or "device camera"), data, ctype, str(body.get("device", ""))[:60])
+        return {"ok": True, "name": name}
+
+    @app.delete("/api/cameras/share/{name}")
+    def camera_unshare(name: str, s: Session = Depends(auth)):
+        from ..cameras import stop_sharing
+
+        stop_sharing(name)
+        return {"ok": True}
+
+    # -- integrations ---------------------------------------------------
+    def imgr():
+        from ..integrations import get_manager
+
+        return get_manager(web.hh.brain("owner").config)
+
+    def _int_call(fn):
+        from ..integrations import IntegrationError
+
+        try:
+            return fn()
+        except (IntegrationError, KeyError, ValueError) as e:
+            raise HTTPException(400, str(e)) from e
+        except OSError as e:
+            raise HTTPException(502, f"Can't reach the system: {e}") from e
+
+    @app.get("/api/integrations")
+    def integrations(s: Session = Depends(auth)):
+        web.owner_only(s)
+        return imgr().overview()
+
+    @app.get("/api/integrations/{name}/values")
+    def integration_values(name: str, s: Session = Depends(auth)):
+        web.owner_only(s)
+        return _int_call(lambda: imgr().read_all(name))
+
+    @app.post("/api/integrations/{name}/write")
+    def integration_write(name: str, body: dict, s: Session = Depends(auth)):
+        web.owner_only(s)  # the person clicking in the app is the approval
+        out = _int_call(lambda: imgr().write(name, body["point"], body["value"]))
+        web.activity({"type": "run_start", "run": "ui-" + uuid.uuid4().hex[:8], "ts": time.time(), "channel": "web",
+                      "profile": s.profile, "text": f"{name}: set {body['point']} to {body['value']}"})
+        return out
+
+    @app.post("/api/integrations/{name}/command")
+    def integration_command(name: str, body: dict, s: Session = Depends(auth)):
+        web.owner_only(s)
+        return _int_call(lambda: imgr().command(name, body["command"], body.get("params") or {}))
+
+    @app.get("/api/integrations/{name}/discover")
+    def integration_discover(name: str, s: Session = Depends(auth)):
+        web.owner_only(s)
+        return _int_call(lambda: imgr().get(name).discover())
+
+    # -- programs --------------------------------------------------------
+    def pmgr():
+        from ..programs import get_program_manager
+
+        owner = web.hh.brain("owner")
+        return get_program_manager(owner.config, owner.ctx.extras.get("program_alert"))
+
+    @app.get("/api/programs")
+    def programs(s: Session = Depends(auth)):
+        web.owner_only(s)
+        return pmgr().list()
+
+    @app.get("/api/programs/{name}")
+    def program(name: str, s: Session = Depends(auth)):
+        web.owner_only(s)
+        return _int_call(lambda: {**pmgr().read(name), "log": pmgr().logs(name, 200)})
+
+    @app.post("/api/programs")
+    def program_save(body: dict, s: Session = Depends(auth)):
+        web.owner_only(s)
+        return _int_call(lambda: pmgr().save(body["name"], body.get("description", ""), body["code"],
+                                             body.get("mode", "service"), body.get("schedule", "")))
+
+    @app.post("/api/programs/{name}/{action}")
+    def program_action(name: str, action: str, s: Session = Depends(auth)):
+        web.owner_only(s)
+        pm = pmgr()
+        if action == "test":
+            return _int_call(lambda: pm.test(name))
+        if action == "deploy":
+            return _int_call(lambda: pm.deploy(name))
+        if action == "stop":
+            return _int_call(lambda: pm.stop(name))
+        if action == "delete":
+            return _int_call(lambda: (pm.delete(name), {"deleted": name})[1])
+        raise HTTPException(404, "Unknown action.")
+
     @app.post("/api/vision")
     def vision(body: dict, s: Session = Depends(auth)):
         """A frame from the browser's camera plus a question — Jarvis looks and answers."""
@@ -800,6 +912,24 @@ def requests_quote(text: str) -> str:
     from urllib.parse import quote_plus
 
     return quote_plus(text)
+
+
+def _integration_status(web) -> list[dict]:
+    from ..integrations import get_manager
+
+    m = get_manager(web.hh.brain("owner").config)
+    return [{"name": n, "type": next((c.get("type") for c in m.configs() if c["name"] == n), ""), **m.status(n)} for n in m.names()]
+
+
+def _program_summary(web) -> list[dict]:
+    from ..programs import get_program_manager
+
+    owner = web.hh.brain("owner")
+    try:
+        return [{k: p.get(k) for k in ("name", "mode", "status", "deployed", "running", "next_run", "last_run")}
+                for p in get_program_manager(owner.config, owner.ctx.extras.get("program_alert")).list()]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _browser_active(web) -> bool:

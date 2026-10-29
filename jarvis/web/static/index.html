@@ -402,6 +402,8 @@ video.cam { width: 100%; border: 1px solid var(--line-strong); border-radius: 4p
     </section>
 
     <section class="view hidden" data-view="ops"></section>
+    <section class="view hidden" data-view="integrations"></section>
+    <section class="view hidden" data-view="programs"></section>
     <section class="view hidden" data-view="browser"></section>
     <section class="view hidden" data-view="media"></section>
     <section class="view hidden" data-view="camera"></section>
@@ -438,17 +440,19 @@ const I = {
   automations: '<circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/>',
   phone: '<path d="M5 3h4l2 5-2.5 1.5a11 11 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 5a2 2 0 0 1 2-2z"/>',
   family: '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.2"/><path d="M3 20a6 6 0 0 1 12 0M14 20a4 4 0 0 1 7 0"/>',
+  integrations: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="8.5" y="14" width="7" height="7" rx="1"/><path d="M6.5 10v2h11v-2M12 12v2"/>',
+  programs: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M13.5 5l-3 14"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
   system: '<rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01"/>',
   more: '<circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/>',
 };
 const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${I[n]}</svg>`;
 const VIEWS = [
-  ["core", "Core"], ["ops", "Operations"], ["browser", "Browser"], ["media", "Media"], ["camera", "Camera"],
+  ["core", "Core"], ["ops", "Operations"], ["integrations", "Integrations"], ["programs", "Programs"], ["browser", "Browser"], ["media", "Media"], ["camera", "Camera"],
   ["tasks", "Tasks & reminders"], ["memory", "Memory"], ["knowledge", "Knowledge"], ["procedures", "Procedures"],
   ["automations", "Automations"], ["phone", "Phone"], ["family", "Family"], ["settings", "Voice & settings"], ["system", "How it's built"],
 ];
-const OWNER_ONLY = new Set(["browser", "automations", "phone"]);
+const OWNER_ONLY = new Set(["browser", "automations", "phone", "integrations", "programs"]);
 const TABS = [["core", "Core"], ["ops", "Ops"], ["browser", "Browser"], ["camera", "Camera"], ["more", "More"]];
 
 /* ================= helpers ================= */
@@ -800,9 +804,12 @@ const TOOL_LABEL = {
   run_shell_command: "Running a command", ha_call_service: "Controlling a device", ha_list_entities: "Looking up devices",
   browser_open: "Opening a page", browser_fill_form: "Filling in a form", browser_click: "Clicking", browser_snapshot: "Reading the page",
   browser_screenshot: "Looking at the page", browser_type: "Typing", fill_word_document: "Filling a Word document", fill_pdf_form: "Filling a PDF form",
-  fill_excel: "Updating a spreadsheet", read_document: "Reading a document", create_word_document: "Writing a document", call_me: "Calling your phone",
+  fill_excel: "Updating a spreadsheet", read_document: "Reading a document", create_word_document: "Writing a document", call_me: "Placing a call to you",
   create_automation: "Scheduling an automation", save_project_file: "Saving project code", send_device_command: "Sending an AV command",
-  show_on_screen: "Putting it on screen", look_at_camera: "Looking through a camera", list_cameras: "Checking cameras", email_me: "Emailing you",
+  show_on_screen: "Putting it on screen", integrations_overview: "Checking connected systems", integration_read: "Reading live values",
+  integration_write: "Controlling a system", integration_command: "Sending a system command", integration_discover: "Discovering a system",
+  write_program: "Writing a program", test_program: "Testing a program", deploy_program: "Deploying a program", stop_program: "Stopping a program",
+  list_programs: "Checking programs", program_logs: "Reading program logs", read_program: "Reading a program", look_at_camera: "Looking through a camera", list_cameras: "Checking cameras", email_me: "Emailing you",
 };
 const label = (name) => TOOL_LABEL[name] || name.replace(/_/g, " ");
 function scrollDown() { const m = $("#messages"); m.scrollTop = m.scrollHeight; }
@@ -883,7 +890,7 @@ function renderSuggestions() {
   const child = STATE.profile.role === "child";
   const list = child
     ? ["Help me with my maths homework", "Let's make a game in Python", "Give me 5 video ideas for my channel", "Show me a guitar lesson for beginners"]
-    : ["What's on my list today?", "Fill in the supplier registration form", "Fill in the quote template for Aurora", "Voltage drop on 40 m of 10 mm² at 63 A, 400 V?", "Show me the anchor camera"];
+    : ["What's the status of the engine room?", "Put the salon in evening mode", "Write a program that alerts me whenever the bilge alarm goes on", "Fill in the supplier registration form", "Show me the anchor camera", "What's on my list today?"];
   $("#suggest").innerHTML = list.map(s => `<button type="button">${esc(s)}</button>`).join("");
   $("#suggest").querySelectorAll("button").forEach(b => b.onclick = () => send(b.textContent));
 }
@@ -1004,6 +1011,7 @@ function opsHtml() {
   return `
   <section class="hud panel"><div class="label"><span><b>▸</b> Active operations</span><span data-active-count>idle</span></div><div data-runs></div></section>
   <section class="hud panel"><div class="label"><span><b>▸</b> Mission queue</span><a href="#tasks" class="mono" style="font-size:11px">open</a></div><div data-queue></div></section>
+  <section class="hud panel"><div class="label"><span><b>▸</b> Systems &amp; programs</span><a href="#integrations" class="mono" style="font-size:11px">open</a></div><div data-systems></div></section>
   <section class="hud panel"><div class="label"><span><b>▸</b> System vitals</span></div><div data-vitals-meta class="mono dim" style="margin:-4px 0 8px;font-size:11px"></div>
     <div class="gauges"><div class="gauge"><canvas width="144" height="144" data-gauge="cpu"></canvas><div class="label">CPU</div></div><div class="gauge"><canvas width="144" height="144" data-gauge="mem"></canvas><div class="label">Memory</div></div><div class="gauge"><canvas width="144" height="144" data-gauge="disk"></canvas><div class="label">Disk</div></div></div>
     <canvas id="spark" width="680" height="92" data-spark></canvas>
@@ -1011,7 +1019,18 @@ function opsHtml() {
   <section class="hud panel"><div class="label"><span><b>▸</b> Feeds</span></div><div data-feeds>${feedsHtml()}</div></section>`;
 }
 function mountOps(el) { el.innerHTML = opsHtml(); renderRuns(); renderQueue(); renderVitals(); refreshFeeds(); }
-function renderQueue() { document.querySelectorAll("[data-queue]").forEach(el => el.innerHTML = queueHtml()); }
+function renderQueue() {
+  document.querySelectorAll("[data-queue]").forEach(el => el.innerHTML = queueHtml());
+  document.querySelectorAll("[data-systems]").forEach(el => el.innerHTML = systemsHtml());
+}
+function systemsHtml() {
+  const d = OPS.dash; if (!d) return '<div class="empty mono">Loading…</div>';
+  const ints = d.integrations || [], progs = d.programs || [];
+  if (!ints.length && !progs.length) return '<div class="empty mono">No integrations or programs yet</div>';
+  const i = ints.map(x => `<div class="q"><span class="light ${x.online ? "on" : ""}" style="align-self:center"></span><span class="t">${esc(x.name.replace(/_/g, " "))}</span><span class="w">${esc(INT_TYPE[x.type] || x.type || "")}</span></div>`).join("");
+  const p = progs.map(x => `<div class="q"><span class="light ${x.running ? "on" : x.status === "failed" ? "" : x.deployed ? "busy" : ""}" style="align-self:center${x.status === "failed" ? ";background:var(--bad)" : ""}"></span><span class="t">⌘ ${esc(x.name)}</span><span class="w">${x.running ? "running" : x.next_run ? until(x.next_run) : esc(x.status || "")}</span></div>`).join("");
+  return i + (p ? `<div class="label" style="margin:10px 0 2px">Programs</div>${p}` : "");
+}
 async function pollDashboard() {
   try {
     OPS.dash = await api("/api/dashboard");
@@ -1243,7 +1262,7 @@ RENDER.tasks = async () => {
   const el = viewEl("tasks");
   const [tasks, rems] = await Promise.all([api("/api/tasks"), api("/api/reminders")]);
   const pr = { high: "warn", normal: "", low: "off" };
-  el.innerHTML = head("Tasks & reminders", "Your to-do list and upcoming reminders. Jarvis announces reminders out loud, as a notification, or by calling your phone.") + `
+  el.innerHTML = head("Tasks & reminders", "Your to-do list and upcoming reminders. Jarvis delivers reminders out loud, as a notification, or with a phone call.") + `
     <div class="grid2">
       <div class="card">
         <div class="section-title"><h2>To do</h2><span class="dim mono">${tasks.length} open</span></div>
@@ -1267,7 +1286,7 @@ RENDER.tasks = async () => {
             <div class="field"><label for="rem-rec">Repeat</label><select id="rem-rec"><option>none</option><option>daily</option><option>weekdays</option><option>weekly</option><option>monthly</option><option>hourly</option></select></div>
           </div>
           <div class="row" style="align-items:center;justify-content:space-between">
-            ${STATE.phone_enabled ? '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rem-call"> Call my phone</label>' : '<span></span>'}
+            ${STATE.phone_enabled ? '<label style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rem-call"> Deliver as a phone call</label>' : '<span></span>'}
             <button class="btn primary" type="submit">Set reminder</button>
           </div>
         </form>
@@ -1316,7 +1335,7 @@ RENDER.phone = async () => {
   const el = viewEl("phone");
   const msgs = await api("/api/phone/messages");
   el.innerHTML = head("Phone", "Call Jarvis on his number, or have him call you. Callers he doesn't recognise reach a receptionist that only takes a message.",
-    STATE.phone_enabled ? '<button class="btn primary" id="call-me">Call my phone now</button>' : '<span class="pill warn"><span class="dot"></span>Phone line not set up · run jarvis phone setup</span>') + `
+    STATE.phone_enabled ? '<button class="btn primary" id="call-me">Call me now</button>' : '<span class="pill warn"><span class="dot"></span>Phone line not set up · run jarvis phone setup</span>') + `
     <div class="card"><div class="section-title"><h2>Messages taken</h2><span class="dim mono">${msgs.length}</span></div>
     <div class="list">${msgs.length ? msgs.map(m => `<div class="item"><div class="body"><b>${esc(m.name || "Unknown caller")}</b> <span class="dim mono">${esc(m.caller || "")}</span><div>${esc(m.message)}</div><div class="dim mono">${fmtDate(m.ts)}</div></div></div>`).join("") : '<div class="empty">No messages.</div>'}</div></div>`;
   if (STATE.phone_enabled) $("#call-me").onclick = async () => { try { await api("/api/phone/call", { body: { opening: `Hello ${STATE.profile.name}, it's ${STATE.assistant}. You asked me to call — how can I help?` } }); toast("Calling you now"); } catch (err) { toast("Couldn't call", err.message, "error"); } };
@@ -1452,45 +1471,46 @@ RENDER.media = async () => {
 
 /* ----- camera ----- */
 let camStream = null, camFacing = "environment";
-function stopCamera() { if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; } }
+function stopCamera() { if (camStream && !camShare) { camStream.getTracks().forEach(t => t.stop()); camStream = null; } }
 RENDER.camera = async () => {
   const el = viewEl("camera");
   const child = STATE.profile.role === "child";
   const cams = child ? [] : await api("/api/cameras").catch(() => []);
-  el.innerHTML = head("Camera", child ? "Show Jarvis your worksheet, a chord shape or anything you want help with." : "Show Jarvis something through your camera, or check the IP cameras. He can see and describe what's in front of them.") + `
+  const guess = /iPad|Tablet/i.test(navigator.userAgent) ? "tablet" : /iPhone|Android/i.test(navigator.userAgent) ? "mobile" : "computer";
+  const shareName = pref.get("shareName", `${STATE.profile.name}'s ${guess} camera`);
+  el.innerHTML = head("Camera", child ? "Show Jarvis your worksheet, a chord shape or anything you want help with." : "Show Jarvis anything through this device's camera, or share it so he can look whenever he needs to. Every connected camera is listed here: shared devices, USB webcams, CCTV and IP cameras.") + `
     <div class="grid2">
       <div class="hud panel stack" style="padding:14px">
-        <div class="label"><b>▸</b> Your camera</div>
+        <div class="label"><span><b>▸</b> This device's camera</span>${camShare ? '<span class="pill on"><span class="dot"></span>shared</span>' : ""}</div>
         <video class="cam" id="cam-video" playsinline muted></video>
         <div class="row">
-          <button class="btn primary" id="cam-start">Start camera</button>
+          <button class="btn primary" id="cam-start">${camStream ? "Restart camera" : "Start camera"}</button>
           <button class="btn" id="cam-flip">Switch camera</button>
           <label class="btn" for="cam-file" style="cursor:pointer">Use a photo…</label><input id="cam-file" type="file" accept="image/*" capture="environment" class="hidden">
         </div>
         <div class="row"><div class="field" style="flex:4 1 220px"><label for="cam-q">Ask about what's in view</label><input id="cam-q" type="text" value="${child ? "Can you help me with this?" : "What am I looking at?"}"></div><button class="btn primary" id="cam-ask">Ask Jarvis</button></div>
+        ${child ? "" : `<div class="row"><div class="field" style="flex:4 1 220px"><label for="cam-share-name">Share as</label><input id="cam-share-name" type="text" value="${esc(shareName)}"></div>
+          <button class="btn ${camShare ? "danger" : ""}" id="cam-share">${camShare ? "Stop sharing" : "Share with Jarvis"}</button></div>
+          <p class="dim" style="margin:0;font-size:13px">While shared, this device sends Jarvis a picture every few seconds, so you can ask him to look at it from anywhere. Keep this page open.</p>`}
       </div>
       ${child ? "" : `<div class="hud panel stack" style="padding:14px">
-        <div class="label"><b>▸</b> IP cameras</div>
-        ${cams.length ? `<div class="cams">${cams.map(c => `<div class="stack" style="gap:6px"><div class="feed" data-cam="${esc(c.name)}"><img alt="${esc(c.name)}" data-feed-img="camera:${esc(c.name)}"><span class="cap">${esc(c.name.replace(/_/g, " "))}</span><span class="live">● LIVE</span></div>
-          <div class="row" style="justify-content:space-between"><span class="dim" style="font-size:13px">${esc(c.description || "")}</span><button class="btn small" data-ask="${esc(c.name)}">Ask Jarvis</button></div></div>`).join("")}</div>`
-          : '<p class="dim">No IP cameras set up yet. Add them under <code>cameras:</code> in the config (snapshot URL or Home Assistant camera).</p>'}
+        <div class="label"><span><b>▸</b> All cameras</span></div>
+        ${cams.length ? `<div class="cams">${cams.map(c => `<div class="stack" style="gap:6px"><div class="feed" data-cam="${esc(c.name)}"><img alt="${esc(c.name)}" data-feed-img="camera:${esc(c.name)}"><span class="cap">${esc(c.name.replace(/_/g, " "))}</span><span class="live">${c.live === false ? '<span style="color:var(--ink-dim)">○ OFFLINE</span>' : "● LIVE"}</span></div>
+          <div class="row" style="justify-content:space-between"><span class="dim" style="font-size:13px">${esc(c.description || c.source)}</span><button class="btn small" data-ask="${esc(c.name)}">Ask Jarvis</button></div></div>`).join("")}</div>`
+          : '<p class="dim">No cameras yet. Share this device\'s camera, or add USB webcams, CCTV (RTSP) or IP cameras under <code>cameras:</code> in the config.</p>'}
       </div>`}
     </div>`;
   const video = $("#cam-video");
+  if (camStream) { video.srcObject = camStream; video.play().catch(() => {}); }
   async function start() {
-    if (DEMO) return toast("Camera works on your own Jarvis", "This demo can't open your camera. Try 'Use a photo…' instead.");
-    stopCamera();
-    try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacing, width: { ideal: 1280 } }, audio: false }); video.srcObject = camStream; await video.play(); }
-    catch (e) { toast("Camera unavailable", "Allow camera access for this site (it needs HTTPS or localhost).", "error"); }
-  }
-  function frame() {
-    const max = 1024, w = video.videoWidth, h = video.videoHeight; if (!w) return null;
-    const k = Math.min(1, max / Math.max(w, h)), c = document.createElement("canvas"); c.width = Math.round(w * k); c.height = Math.round(h * k);
-    c.getContext("2d").drawImage(video, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.82);
+    if (DEMO) return toast("Camera works on your own Jarvis", "This demo can't open the camera. Try 'Use a photo…' instead.");
+    if (camStream) camStream.getTracks().forEach(t => t.stop());
+    try { camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: camFacing, width: { ideal: 1280 } }, audio: false }); video.srcObject = camStream; await video.play(); return true; }
+    catch (e) { toast("Camera unavailable", "Allow camera access for this site (it needs HTTPS or localhost).", "error"); return false; }
   }
   $("#cam-start").onclick = start;
   $("#cam-flip").onclick = () => { camFacing = camFacing === "user" ? "environment" : "user"; start(); };
-  $("#cam-ask").onclick = () => { const f = frame(); if (!f) return toast("Start the camera first", "Or use a photo."); stopCamera(); send($("#cam-q").value || "What do you see?", { image: f }); };
+  $("#cam-ask").onclick = () => { const f = grabFrame(); if (!f) return toast("Start the camera first", "Or use a photo."); send($("#cam-q").value || "What do you see?", { image: f }); };
   $("#cam-file").onchange = () => {
     const file = $("#cam-file").files[0]; if (!file) return;
     const im = new Image(); im.onload = () => {
@@ -1500,11 +1520,202 @@ RENDER.camera = async () => {
     };
     im.src = URL.createObjectURL(file);
   };
+  const sb = $("#cam-share");
+  if (sb) sb.onclick = async () => {
+    if (camShare) { stopShare(); return RENDER.camera(); }
+    if (DEMO) return toast("Sharing works on your own Jarvis", "Your device would send Jarvis a picture every few seconds.");
+    if (!camStream && !(await start())) return;
+    const name = $("#cam-share-name").value.trim() || shareName; pref.set("shareName", name);
+    camShare = { name, timer: setInterval(() => shareTick(name), 2500) }; shareTick(name);
+    toast("Camera shared", `Jarvis can now look through "${name}".`); RENDER.camera();
+  };
   el.querySelectorAll("[data-ask]").forEach(b => b.onclick = () => send(`Look at the ${b.dataset.ask} camera and tell me what you see.`));
   el.querySelectorAll("[data-cam]").forEach(f => f.onclick = () => { NOW = { source: `camera:${f.dataset.cam}`, title: `Camera: ${f.dataset.cam}`, kind: "camera" }; location.hash = "#media"; });
   refreshFeeds();
   viewTimer = setInterval(refreshFeeds, 4000);
 };
+let camShare = null;
+function grabFrame() {
+  const video = $("#cam-video");
+  const src = video && video.videoWidth ? video : null;
+  const v = src || (camStream ? Object.assign(document.createElement("video"), { srcObject: camStream, muted: true }) : null);
+  if (!v || !v.videoWidth) return null;
+  const max = 1024, w = v.videoWidth, h = v.videoHeight, k = Math.min(1, max / Math.max(w, h)), c = document.createElement("canvas");
+  c.width = Math.round(w * k); c.height = Math.round(h * k); c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.75);
+}
+const shareVideo = document.createElement("video"); shareVideo.muted = true; shareVideo.playsInline = true;
+async function shareTick(name) {
+  if (!camStream) return stopShare();
+  if (shareVideo.srcObject !== camStream) { shareVideo.srcObject = camStream; shareVideo.play().catch(() => {}); }
+  const v = shareVideo; if (!v.videoWidth) return;
+  const k = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight)), c = document.createElement("canvas");
+  c.width = Math.round(v.videoWidth * k); c.height = Math.round(v.videoHeight * k); c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+  try { await api("/api/cameras/share", { body: { name, image: c.toDataURL("image/jpeg", 0.7), device: navigator.platform || "" } }); } catch (e) { /* retry next tick */ }
+}
+function stopShare() {
+  if (!camShare) return;
+  clearInterval(camShare.timer); api(`/api/cameras/share/${encodeURIComponent(camShare.name.toLowerCase().replace(/[^a-z0-9_-]+/g, "_"))}`, { method: "DELETE" }).catch(() => {});
+  camShare = null; toast("Camera no longer shared");
+}
+
+/* ----- integrations ----- */
+const INT_TYPE = { modbus: "Modbus", lutron: "Lutron", crestron_home: "Crestron Home", crestron_tcp: "Crestron (TCP)", tcp: "TCP / ASCII", rest: "REST" };
+RENDER.integrations = async () => {
+  const el = viewEl("integrations");
+  const list = await api("/api/integrations");
+  el.innerHTML = head("Integrations", "Building and control systems Jarvis is connected to. Live values refresh every few seconds. Ask Jarvis to control them, or set points here.",
+    '<a class="btn" href="#programs">Programs</a>') + (list.length ? `<div class="stack">${list.map(i => `
+    <section class="hud panel" data-int="${esc(i.name)}">
+      <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="row" style="align-items:center;gap:10px"><span class="light ${i.status && i.status.online ? "on" : ""}" style="width:9px;height:9px"></span><h2 style="text-transform:none;letter-spacing:.04em">${esc(i.name.replace(/_/g, " "))}</h2><span class="pill accent">${esc(INT_TYPE[i.type] || i.type)}</span>${i.status && !i.status.online ? `<span class="pill warn" title="${esc(i.status.error || "")}">offline</span>` : ""}</div>
+        <div class="row">${(i.commands || []).map(c => `<button class="btn small" data-cmd="${esc(c.name)}">${esc(c.name.replace(/_/g, " "))}</button>`).join("")}<button class="btn small" data-discover>Discover</button></div>
+      </div>
+      ${i.description ? `<p class="dim" style="margin:-4px 0 10px">${esc(i.description)}</p>` : ""}
+      ${i.points.length ? `<div class="list">${i.points.map(p => `
+        <div class="item" style="align-items:center" data-point="${esc(p.name)}">
+          <div class="body"><b>${esc(p.name.replace(/_/g, " "))}</b>${p.description ? `<div class="dim" style="font-size:13px">${esc(p.description)}</div>` : ""}</div>
+          <div class="mono" style="font-size:18px;color:var(--accent-2);min-width:110px;text-align:right" data-val>—</div>
+          ${p.writable ? `<div class="actions" style="align-items:center">${p.units === "%" ? `<input type="range" min="0" max="100" step="1" data-in aria-label="${esc(p.name)} level" style="width:120px">` : `<input type="text" data-in aria-label="New value for ${esc(p.name)}" style="width:90px" placeholder="${esc(p.units || "value")}">`}<button class="btn small" data-set>Set</button></div>` : '<div class="actions"><span class="pill">read only</span></div>'}
+        </div>`).join("")}</div>` : '<p class="dim">No points configured. Use Discover, then add points in the config (or ask Jarvis to help).</p>'}
+    </section>`).join("")}</div>`
+    : `<div class="card"><h2>No integrations yet</h2><p class="dim">Add your systems under <code>integrations:</code> in <code>~/.jarvis/config.yaml</code>. Supported: Crestron Home (REST), Crestron or any ASCII device over TCP, Lutron (RadioRA 2, HomeWorks QS, Quantum), Modbus TCP/RTU (PLCs, generators, meters, HVAC) and any REST API. The README has examples.</p></div>`);
+  const byName = Object.fromEntries(list.map(i => [i.name, i]));
+  async function refresh() {
+    for (const sec of el.querySelectorAll("[data-int]")) {
+      const name = sec.dataset.int; if (!byName[name].points.length) continue;
+      try {
+        const vals = await api(`/api/integrations/${encodeURIComponent(name)}/values`);
+        vals.forEach(v => {
+          const row = sec.querySelector(`[data-point="${CSS.escape(v.point)}"]`); if (!row) return;
+          const out = row.querySelector("[data-val]");
+          out.textContent = v.error ? "error" : (typeof v.value === "boolean" ? (v.value ? "ON" : "OFF") : `${v.value}${v.units ? " " + v.units : ""}`);
+          out.title = v.error || ""; out.style.color = v.error ? "var(--bad)" : "";
+          const inp = row.querySelector("[data-in]"); if (inp && inp.type === "range" && !inp.matches(":active") && typeof v.value === "number") inp.value = v.value;
+        });
+      } catch (e) { sec.querySelectorAll("[data-val]").forEach(o => { o.textContent = "offline"; o.style.color = "var(--ink-dim)"; }); }
+    }
+  }
+  el.querySelectorAll("[data-set]").forEach(b => b.onclick = () => {
+    const row = b.closest("[data-point]"), sec = b.closest("[data-int]"), point = row.dataset.point;
+    const raw = row.querySelector("[data-in]").value.trim(); if (raw === "") return;
+    const value = /^(on|true)$/i.test(raw) ? true : /^(off|false)$/i.test(raw) ? false : isNaN(+raw) ? raw : +raw;
+    const p = byName[sec.dataset.int].points.find(x => x.name === point);
+    const d = dialog(`<div class="label">Control</div><h2>Set ${esc(point.replace(/_/g, " "))}?</h2><div class="what">${esc(sec.dataset.int)} · ${esc(point)} → ${esc(String(value))} ${esc(p.units || "")}</div><div class="btns"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>Set it</button></div>`, "approve");
+    $("[data-x]", d.el).onclick = d.close;
+    $("[data-ok]", d.el).onclick = async () => { d.close(); try { await api(`/api/integrations/${encodeURIComponent(sec.dataset.int)}/write`, { body: { point, value } }); toast("Done", `${point} → ${value}`); refresh(); } catch (err) { toast("Couldn't set it", err.message, "error"); } };
+  });
+  el.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => {
+    const sec = b.closest("[data-int]"), cmd = byName[sec.dataset.int].commands.find(c => c.name === b.dataset.cmd);
+    const extra = cmd.buttons ? `<div class="dim" style="font-size:13px">Buttons: ${cmd.buttons.map(x => esc(x.name)).join(", ")}</div>` : cmd.presets ? `<div class="dim" style="font-size:13px">Presets: ${cmd.presets.map(esc).join(", ")}</div>` : "";
+    const d = dialog(`<div class="label">${esc(sec.dataset.int)}</div><h2>${esc(cmd.name.replace(/_/g, " "))}</h2><p class="dim" style="margin:0">${esc(cmd.description)}</p>${extra}
+      <div class="field"><label for="cmd-params">Parameters (JSON)</label><textarea id="cmd-params" class="mono" style="min-height:90px">${esc(JSON.stringify(cmd.params || {}, null, 2))}</textarea></div>
+      <pre class="doc-text hidden" id="cmd-out"></pre>
+      <div class="btns"><button class="btn" data-x>Close</button><button class="btn primary" data-run>${cmd.writes ? "Run" : "Read"}</button></div>`, "wide");
+    $("[data-x]", d.el).onclick = d.close;
+    $("[data-run]", d.el).onclick = async () => {
+      let params; try { params = JSON.parse($("#cmd-params", d.el).value || "{}"); } catch (e) { return toast("Parameters must be valid JSON", e.message, "error"); }
+      const out = $("#cmd-out", d.el); out.classList.remove("hidden"); out.textContent = "Running…";
+      try { out.textContent = JSON.stringify(await api(`/api/integrations/${encodeURIComponent(sec.dataset.int)}/command`, { body: { command: cmd.name, params } }), null, 2); refresh(); }
+      catch (err) { out.textContent = err.message; }
+    };
+  });
+  el.querySelectorAll("[data-discover]").forEach(b => b.onclick = async () => {
+    const name = b.closest("[data-int]").dataset.int;
+    const d = dialog(`<div class="label">Discover</div><h2>${esc(name.replace(/_/g, " "))}</h2><pre class="doc-text" id="disc">Looking…</pre><div class="btns"><button class="btn" data-x>Close</button></div>`, "wide");
+    $("[data-x]", d.el).onclick = d.close;
+    try { $("#disc", d.el).textContent = JSON.stringify(await api(`/api/integrations/${encodeURIComponent(name)}/discover`), null, 2); } catch (err) { $("#disc", d.el).textContent = err.message; }
+  });
+  refresh();
+  viewTimer = setInterval(refresh, 4000);
+};
+
+/* ----- programs ----- */
+const PROG_TEMPLATE = `"""Describe what this program does."""
+from jarvis import sdk
+
+LIMIT_KW = 80          # tune thresholds here
+
+def check():
+    load = sdk.read("engine_plc", "gen1_load")
+    sdk.log("load", load)
+    if load > LIMIT_KW and not sdk.get_state("alerted", False):
+        sdk.alert("Generator 1", f"Load is {load} kW")
+        sdk.set_state("alerted", True)
+    elif load < LIMIT_KW * 0.9:
+        sdk.set_state("alerted", False)
+
+sdk.every(30, check)
+`;
+function progStatus(p) {
+  if (p.running) return '<span class="pill on"><span class="dot"></span>running</span>';
+  const s = p.status || "draft";
+  const cls = { scheduled: "accent", failed: "warn", stopped: "off", finished: "on", draft: "off" }[s] || "";
+  return `<span class="pill ${cls}">${esc(s)}</span>`;
+}
+RENDER.programs = async () => {
+  const el = viewEl("programs");
+  const list = await api("/api/programs");
+  el.innerHTML = head("Programs", "Control logic that runs on its own: watching alarms, reacting to sensors, syncing systems, logging data. Jarvis can write, test and deploy these for you, and nothing is deployed without your approval.",
+    '<button class="btn" id="p-ask">Ask Jarvis to write one</button><button class="btn primary" id="p-new">New program</button>') +
+    (list.length ? `<div class="grid2">${list.map(p => `
+      <div class="card stack" data-prog="${esc(p.name)}">
+        <div class="section-title" style="margin:0"><h2 style="text-transform:none;letter-spacing:.03em">${esc(p.name)}</h2><div class="row" style="gap:6px">${progStatus(p)}<span class="pill">${esc(p.mode)}${p.schedule ? " · " + esc(p.schedule) : ""}</span></div></div>
+        <p style="margin:0">${esc(p.description || "")}</p>
+        <div class="dim mono">${[p.last_run ? "last run " + fmtDate(p.last_run) : "", p.next_run ? "next " + until(p.next_run) : "", p.last_test ? `test ${p.last_test_ok ? "passed" : "failed"} ${fmtDate(p.last_test)}` : "not tested yet", p.syntax_error ? "SYNTAX ERROR" : ""].filter(Boolean).join(" · ")}</div>
+        <div class="row"><button class="btn small" data-a="open">Code &amp; logs</button><button class="btn small" data-a="test">Test</button>
+          ${p.deployed ? '<button class="btn small danger" data-a="stop">Stop</button>' : '<button class="btn small primary" data-a="deploy">Deploy</button>'}<button class="btn small" data-a="edit">Edit</button></div>
+      </div>`).join("")}</div>`
+      : '<div class="card"><h2>No programs yet</h2><p class="dim">Try asking: "Write a program that alerts me if generator 1 load goes above 80 kW", or "Every evening at 19:00, close the salon blinds and set the downlights to 30%".</p></div>');
+  $("#p-ask").onclick = () => { location.hash = "#core"; $("#chat-input").value = "Write a program that "; setTimeout(() => $("#chat-input").focus(), 100); };
+  $("#p-new").onclick = () => editProgram();
+  el.querySelectorAll("[data-prog] [data-a]").forEach(b => b.onclick = async () => {
+    const name = b.closest("[data-prog]").dataset.prog, a = b.dataset.a;
+    if (a === "open") return openProgram(name);
+    if (a === "edit") return editProgram(await api(`/api/programs/${encodeURIComponent(name)}`));
+    if (a === "test") {
+      const d = dialog(`<div class="label">Test run</div><h2>${esc(name)}</h2><pre class="doc-text" id="t-out">Running… (services are stopped after 30 s)</pre><div class="btns"><button class="btn" data-x>Close</button></div>`, "wide");
+      $("[data-x]", d.el).onclick = d.close;
+      try { const r = await api(`/api/programs/${encodeURIComponent(name)}/test`, { body: {} }); $("#t-out", d.el).textContent = `${r.ok ? "✓ OK" : "✕ FAILED"} · exit ${r.exit_code} · ${r.ran_for_s}s\n\n${r.output}`; }
+      catch (err) { $("#t-out", d.el).textContent = err.message; }
+      return RENDER.programs();
+    }
+    if (a === "deploy") {
+      const p = list.find(x => x.name === name);
+      const d = dialog(`<div class="label">Authorisation required</div><h2>Deploy ${esc(name)}?</h2><div class="what">${esc(p.description)}<br>Runs: ${esc(p.mode)}${p.schedule ? " · " + esc(p.schedule) : ""} · ${p.last_test_ok ? "tested OK" : "not successfully tested yet"}</div><div class="btns"><button class="btn" data-x>Cancel</button><button class="btn primary" data-ok>Deploy</button></div>`, "approve");
+      $("[data-x]", d.el).onclick = d.close;
+      $("[data-ok]", d.el).onclick = async () => { d.close(); try { await api(`/api/programs/${encodeURIComponent(name)}/deploy`, { body: {} }); toast("Deployed", name); } catch (err) { toast("Couldn't deploy", err.message, "error"); } RENDER.programs(); };
+      return;
+    }
+    if (a === "stop") { await api(`/api/programs/${encodeURIComponent(name)}/stop`, { body: {} }); toast("Stopped", name); return RENDER.programs(); }
+  });
+};
+async function openProgram(name) {
+  const p = await api(`/api/programs/${encodeURIComponent(name)}`);
+  const d = dialog(`<div class="label">Program</div><h2>${esc(name)}</h2><p class="dim" style="margin:0">${esc(p.description || "")}</p>
+    <div class="label" style="margin-top:6px">Code</div><pre class="doc-text mono" style="font-size:12.5px">${esc(p.code)}</pre>
+    <div class="label">Log</div><pre class="doc-text mono" id="p-log" style="font-size:12px">${esc(p.log)}</pre>
+    <div class="btns"><button class="btn" data-x>Close</button></div>`, "wide");
+  const t = setInterval(async () => { try { const q = await api(`/api/programs/${encodeURIComponent(name)}`); const lg = $("#p-log", d.el); if (lg) { lg.textContent = q.log; lg.scrollTop = lg.scrollHeight; } } catch (e) { /* ignore */ } }, 3000);
+  $("[data-x]", d.el).onclick = () => { clearInterval(t); d.close(); };
+}
+function editProgram(p = {}) {
+  const d = dialog(`<div class="label">${p.name ? "Edit" : "New"} program</div>
+    <div class="row"><div class="field"><label for="pe-name">Name</label><input id="pe-name" type="text" value="${esc(p.name || "")}" placeholder="generator-load-watch" ${p.name ? "readonly" : ""}></div>
+    <div class="field"><label for="pe-mode">Runs</label><select id="pe-mode">${["service", "schedule", "once"].map(m => `<option ${p.mode === m ? "selected" : ""} value="${m}">${{ service: "Continuously (service)", schedule: "On a schedule", once: "Once" }[m]}</option>`).join("")}</select></div>
+    <div class="field"><label for="pe-sched">Schedule (cron)</label><input id="pe-sched" type="text" class="mono" value="${esc(p.schedule || "")}" placeholder="0 19 * * *"></div></div>
+    <div class="field"><label for="pe-desc">What it does</label><input id="pe-desc" type="text" value="${esc(p.description || "")}"></div>
+    <div class="field"><label for="pe-code">Code (Python, uses jarvis.sdk)</label><textarea id="pe-code" class="mono" spellcheck="false" style="min-height:300px;font-size:12.5px">${esc(p.code || PROG_TEMPLATE)}</textarea></div>
+    <div class="btns"><button class="btn" data-x>Cancel</button><button class="btn primary" data-s>Save</button></div>`, "wide");
+  $("[data-x]", d.el).onclick = d.close;
+  $("[data-s]", d.el).onclick = async () => {
+    try {
+      const r = await api("/api/programs", { body: { name: $("#pe-name", d.el).value.trim(), description: $("#pe-desc", d.el).value, mode: $("#pe-mode", d.el).value, schedule: $("#pe-sched", d.el).value.trim(), code: $("#pe-code", d.el).value } });
+      if (r.syntax_error) return toast("Saved with a syntax error", r.syntax_error, "error");
+      d.close(); toast("Saved", r.note || ""); RENDER.programs();
+    } catch (err) { toast("Couldn't save", err.message, "error"); }
+  };
+}
 
 /* ----- voice & settings ----- */
 RENDER.settings = async () => {
@@ -1547,7 +1758,7 @@ RENDER.system = async () => {
   const s = await api("/api/system");
   const integ = s.integrations;
   const pill = (on, lbl) => `<span class="pill ${on ? "on" : "off"}"><span class="dot"></span>${lbl}</span>`;
-  const MOD = { system: "Computer", memory: "Memory", knowledge: "Knowledge & teaching", expert: "Expert", tasks: "Tasks, reminders, automations", weather: "Weather", devices: "Devices & AV", kids: "Learning projects", comms: "Phone & email", browser: "Browser", documents: "Documents", media: "Screen & cameras" };
+  const MOD = { system: "Computer", memory: "Memory", knowledge: "Knowledge & teaching", expert: "Expert", tasks: "Tasks, reminders, automations", weather: "Weather", devices: "Devices & AV", kids: "Learning projects", comms: "Phone & email", browser: "Browser", documents: "Documents", media: "Screen & cameras", integrations: "Building systems", programs: "Programs" };
   el.innerHTML = head("How it's built", `Version ${esc(s.version)} · ${s.tool_count} tools · everyday model <span class="mono">${esc(s.model)}</span> · expert model <span class="mono">${esc(s.expert_model || "—")}</span>`,
     '<a class="btn" href="/api/backup" id="backup-btn">Download what Jarvis knows</a>') + `
     <div class="tiles">
@@ -1559,11 +1770,11 @@ RENDER.system = async () => {
       <div class="tile"><div class="n">${s.tool_count}</div><div class="l">tools</div></div>
     </div>
     <div class="card" style="margin-bottom:16px">
-      <div class="section-title"><h2>Architecture</h2><div class="row" style="gap:6px">${pill(integ.claude_api, "Claude API")}${pill(s.web_search, "web search")}${pill(integ.voice, "voice")}${pill(integ.browser, "browser")}${pill(integ.phone, "phone")}${pill(integ.home_assistant, "Home Assistant")}${pill(integ.cameras, "cameras")}${pill(integ.email, "email")}${pill(integ.watched_folders > 0, `${integ.watched_folders} watched folders`)}</div></div>
+      <div class="section-title"><h2>Architecture</h2><div class="row" style="gap:6px">${pill(integ.claude_api, "Claude API")}${pill(s.web_search, "web search")}${pill(integ.voice, "voice")}${pill(integ.browser, "browser")}${pill(integ.phone, "phone")}${pill(integ.home_assistant, "Home Assistant")}${pill(integ.cameras, "cameras")}${pill(integ.email, "email")}${pill(integ.integrations > 0, `${integ.integrations || 0} integrations`)}${pill(integ.watched_folders > 0, `${integ.watched_folders} watched folders`)}</div></div>
       <div class="arch">
         <div class="layer"><div class="lbl">You talk to him</div><div class="boxes">
           <div class="box"><b>Voice</b><span>wake word, speech recognition, neural voice</span></div>
-          <div class="box"><b>This app</b><span>core, operations, browser, media, camera</span></div>
+          <div class="box"><b>This app</b><span>core, operations, integrations, programs, browser, media, cameras</span></div>
           <div class="box"><b>Phone</b><span>Vapi number → Jarvis brain</span></div>
           <div class="box"><b>Terminal</b><span>jarvis chat · ask · teach</span></div></div></div>
         <div class="flow">▼</div>
@@ -1585,6 +1796,7 @@ RENDER.system = async () => {
           <div class="box"><b>Anthropic</b><span>Claude models + web search</span></div>
           <div class="box"><b>Vapi + Twilio</b><span>phone calls</span></div>
           <div class="box"><b>Cloudflare Tunnel</b><span>secure public address</span></div>
+          <div class="box"><b>Building systems</b><span>Crestron · Lutron · Modbus · REST · TCP</span></div>
           <div class="box"><b>Home Assistant</b><span>lights, climate, media, cameras</span></div></div></div>
       </div>
     </div>
