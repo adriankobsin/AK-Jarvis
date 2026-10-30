@@ -114,7 +114,7 @@ DEFAULTS: dict[str, Any] = {
     "programs": {"enabled": True, "max_restarts": 5, "test_timeout": 30},
     "cameras": [],                 # IP cameras Jarvis can look at — see templates/config.yaml
     "browser": {
-        "mode": "jarvis",          # jarvis = own persistent Chrome profile; cdp = attach to a running Chrome
+        "mode": "auto",            # auto = your Chrome when it's connected, else Jarvis's own; jarvis; cdp
         "headless": False,         # show the window so you can watch / take over
         "channel": "",             # "chrome" to use installed Google Chrome instead of bundled Chromium
         "cdp_url": "http://127.0.0.1:9222",

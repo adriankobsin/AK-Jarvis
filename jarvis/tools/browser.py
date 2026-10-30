@@ -83,7 +83,9 @@ class BrowserWorker:
         self.cfg = cfg
         self.q: queue.Queue = queue.Queue()
         self.thread = threading.Thread(target=self._loop, daemon=True, name="jarvis-browser")
-        self.pw = self.context = self.page = None
+        self.pw = self.context = self.page = self.browser = None
+        self.kind: str | None = None
+        self._last_probe = 0.0
         self.thread.start()
 
     def _loop(self):
@@ -106,22 +108,58 @@ class BrowserWorker:
         return box["result"]
 
     # -- runs on worker thread ----------------------------------------
-    def ensure(self):
-        if self.context is not None:
+    def cdp_available(self) -> bool:
+        """Is a Chrome with remote debugging reachable (e.g. your laptop via the Jarvis tunnel)?"""
+        import urllib.request
+
+        url = self.cfg["browser"].get("cdp_url", "http://127.0.0.1:9222").rstrip("/") + "/json/version"
+        try:
+            with urllib.request.urlopen(url, timeout=1.5) as r:
+                return r.status == 200
+        except Exception:
+            return False
+
+    def _drop(self):
+        for obj in (self.context if self.kind == "own" else None, self.browser):
             try:
-                _ = self.context.pages
-                if self.page is None or self.page.is_closed():
-                    self.page = self.context.pages[-1] if self.context.pages else self.context.new_page()
-                return self.page
+                if obj is not None:
+                    obj.close()
             except Exception:
-                self.context = None
+                pass
+        self.context = self.page = self.browser = None
+        self.kind = None
+
+    def ensure(self):
+        import time
+
+        mode = self.cfg["browser"].get("mode", "jarvis")
+        if self.context is not None:
+            alive = True
+            if self.kind == "cdp" and not (self.browser and self.browser.is_connected() and self.cdp_available()):
+                alive = False  # your Chrome closed or the tunnel dropped
+            elif self.kind == "own" and mode == "auto" and time.time() - self._last_probe > 20:
+                self._last_probe = time.time()
+                if self.cdp_available():
+                    alive = False  # your Chrome just came online: hand over to it
+            if alive:
+                try:
+                    _ = self.context.pages
+                    if self.page is None or self.page.is_closed():
+                        self.page = self.context.pages[-1] if self.context.pages else self.context.new_page()
+                    return self.page
+                except Exception:
+                    pass
+            self._drop()
         from playwright.sync_api import sync_playwright
 
         b = self.cfg["browser"]
         self.pw = self.pw or sync_playwright().start()
-        if b.get("mode") == "cdp":
-            browser = self.pw.chromium.connect_over_cdp(b.get("cdp_url", "http://127.0.0.1:9222"))
-            self.context = browser.contexts[0] if browser.contexts else browser.new_context()
+        self._last_probe = time.time()
+        use_cdp = mode == "cdp" or (mode == "auto" and self.cdp_available())
+        if use_cdp:
+            self.browser = self.pw.chromium.connect_over_cdp(b.get("cdp_url", "http://127.0.0.1:9222"))
+            self.context = self.browser.contexts[0] if self.browser.contexts else self.browser.new_context()
+            self.kind = "cdp"
         else:
             profile = Path(self.cfg.data_dir) / "browser-profile"
             profile.mkdir(parents=True, exist_ok=True)
@@ -145,6 +183,7 @@ class BrowserWorker:
                 import logging
 
                 logging.getLogger("jarvis.browser").warning("No display for the browser window; running headless (%s)", str(e)[:80])
+            self.kind = "own"
         self.context.set_default_timeout(int(b.get("timeout_ms", 15000)))
         self.page = self.context.pages[-1] if self.context.pages else self.context.new_page()
         return self.page
@@ -394,6 +433,25 @@ def register(reg, config) -> None:
 
         res = wk.call(do)
         return res if res else after(ctx, f"{action} done.")
+
+    @reg.tool(
+        "browser_status",
+        "Which Chrome is Jarvis controlling right now — Adrian's own Chrome on his computer "
+        "(connected through the Jarvis Chrome tunnel) or Jarvis's own browser on the server — "
+        "and which tabs are open.",
+        {},
+    )
+    def browser_status(ctx):
+        wk = w(ctx)
+
+        def do():
+            wk.ensure()
+            where = ("Adrian's Chrome on his computer" if wk.kind == "cdp"
+                     else "Jarvis's own browser on the server (Adrian's Chrome isn't connected)")
+            tabs = "\n".join(f"{i}: {p.title()} — {p.url}" for i, p in enumerate(wk.context.pages))
+            return f"Controlling: {where}\nTabs:\n{tabs or '(none)'}"
+
+        return wk.call(do)
 
     @reg.tool(
         "browser_screenshot",

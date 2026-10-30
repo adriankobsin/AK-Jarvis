@@ -163,7 +163,8 @@ integrations: []
 #      - {name: wind_speed, path: /current, json_path: wind.speed, units: kn}
 
 browser:
-  mode: jarvis                    # jarvis = Jarvis's own Chrome window with a saved profile (log in once)
+  mode: auto                      # auto   = your own Chrome when it's connected (Jarvis Chrome tunnel), else Jarvis's own
+                                  # jarvis = Jarvis's own Chrome window with a saved profile (log in once)
                                   # cdp    = attach to a Chrome you started with --remote-debugging-port=9222
   headless: false                 # keep the window visible so you can watch and take over
   channel: ""                     # "chrome" to drive your installed Google Chrome instead of Chromium
