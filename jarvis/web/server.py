@@ -504,11 +504,11 @@ def create_app(cfg, household: Household | None = None, password: str | None = N
 
     @app.post("/api/phone/call")
     def phone_call(body: dict, s: Session = Depends(auth)):
-        from ..phone import place_call
+        from ..phone import place_call, primary_owner
 
         web.owner_only(s)
         try:
-            cid = place_call(cfg, cfg["phone"].get("owner_number"),
+            cid = place_call(cfg, primary_owner(cfg["phone"]),
                              body.get("opening") or f"Hello, it's {cfg['assistant'].get('name', 'Jarvis')}. You asked me to call.",
                              {"reason": body.get("reason", "Requested from the web app")})
         except Exception as e:  # noqa: BLE001

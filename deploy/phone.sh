@@ -98,7 +98,7 @@ finish)
   [[ -n "$K" ]] && set_env VAPI_API_KEY "$K" && ok "key saved"
   read -r -p "  Assistant ID: " A; A=$(echo "$A" | tr -d '\r ')
   read -r -p "  Phone Number ID: " N; N=$(echo "$N" | tr -d '\r ')
-  read -r -p "  YOUR mobile, international format (e.g. +66812345678): " M; M=$(echo "$M" | tr -d '\r ')
+  read -r -p "  YOUR mobile(s), international format, comma-separated (e.g. +447700000000,+6580000000): " M; M=$(echo "$M" | tr -d '\r ')
   [[ -n "$A" ]] && set_phone assistant_id "$A"
   [[ -n "$N" ]] && set_phone phone_number_id "$N"
   [[ -n "$M" ]] && set_phone owner_number "$M"

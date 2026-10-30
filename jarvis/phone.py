@@ -97,6 +97,18 @@ def _norm(num: str) -> str:
     return "".join(ch for ch in (num or "") if ch.isdigit() or ch == "+")
 
 
+def owner_numbers(ph: dict) -> list[str]:
+    """phone.owner_number may hold several numbers, comma-separated; the first is used for outbound calls."""
+    raw = ph.get("owner_number") or ""
+    items = raw if isinstance(raw, list) else str(raw).split(",")
+    return [x.strip() for x in items if str(x).strip()]
+
+
+def primary_owner(ph: dict) -> str:
+    nums = owner_numbers(ph)
+    return nums[0] if nums else ""
+
+
 class PhoneGateway:
     """Maps calls to per-call Brain sessions and produces replies."""
 
@@ -111,7 +123,7 @@ class PhoneGateway:
 
     def profile_for(self, number: str) -> str:
         n = _norm(number)
-        if n and n == _norm(self.ph.get("owner_number", "")):
+        if n and n in {_norm(x) for x in owner_numbers(self.ph)}:
             return "owner"
         for num, pid in (self.ph.get("callers") or {}).items():
             if n and n == _norm(num) and pid in self.brains:

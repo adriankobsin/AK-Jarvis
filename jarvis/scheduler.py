@@ -66,9 +66,9 @@ class JarvisScheduler:
         for r in due:
             if r.get("channel") == "call" and self.config["phone"].get("enabled"):
                 try:
-                    from .phone import place_call
+                    from .phone import place_call, primary_owner
 
-                    place_call(self.config, self.config["phone"]["owner_number"],
+                    place_call(self.config, primary_owner(self.config["phone"]),
                                f"Reminder: {r['text']}", {"reason": f"Reminder: {r['text']}"})
                     continue
                 except Exception as e:

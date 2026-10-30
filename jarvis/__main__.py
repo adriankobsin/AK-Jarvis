@@ -392,9 +392,9 @@ def cmd_phone(cfg, args) -> None:
                                  name=cfg["assistant"]["name"]))
     elif args.action == "call":
         require_key()
-        from .phone import place_call
+        from .phone import place_call, primary_owner
 
-        number = args.number or ph.get("owner_number")
+        number = args.number or primary_owner(ph)
         if not number:
             sys.exit("Set phone.owner_number or pass --number.")
         print("Call id:", place_call(cfg, number, args.message or f"Hello, it's {cfg['assistant']['name']}. "
@@ -402,11 +402,11 @@ def cmd_phone(cfg, args) -> None:
     elif args.action == "test":
         require_key()
         from .household import Household
-        from .phone import PhoneGateway
+        from .phone import PhoneGateway, primary_owner
 
         hh = Household(cfg, start_schedulers=False)
         gw = PhoneGateway(cfg, hh.all_brains(), lambda t, m: print(f"🔔 {t}: {m}"))
-        caller = args.number or ph.get("owner_number") or "+10000000000"
+        caller = args.number or primary_owner(ph) or "+10000000000"
         print(f"Simulated call from {caller} → profile '{gw.profile_for(caller)}'. Empty line to hang up.")
         while True:
             text = input("caller › ").strip()
