@@ -7,6 +7,7 @@ guest receptionist for unknown numbers). Outbound calls are placed through Vapi'
 """
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -154,6 +155,24 @@ class PhoneGateway:
         return lambda: brain.run(text, voice=True)
 
 
+def _redact(path: str, secret: str) -> str:
+    return path.replace(secret, "<secret>") if secret else path
+
+
+def _authorized(headers, path: str, secret: str) -> bool:
+    """Accept the secret as a Bearer token, an API-key header, or a path segment
+    (https://host:8443/<secret>/chat/completions) — Vapi setups differ."""
+    if not secret:
+        return False
+    for name in ("Authorization", "X-Api-Key", "Api-Key", "X-Vapi-Secret"):
+        val = (headers.get(name) or "").strip()
+        if val.lower().startswith("bearer "):
+            val = val[7:].strip()
+        if val and hmac.compare_digest(val, secret):
+            return True
+    return secret in path.split("?")[0].split("/")
+
+
 def make_handler(gateway: PhoneGateway, secret: str):
     filler_after = float(gateway.ph.get("filler_after_seconds", 2.5))
 
@@ -179,8 +198,10 @@ def make_handler(gateway: PhoneGateway, secret: str):
         def do_POST(self):
             if not self.path.rstrip("/").endswith("chat/completions"):
                 return self._json(404, {"error": "not found"})
-            auth = self.headers.get("Authorization", "")
-            if not secret or auth not in (f"Bearer {secret}", secret):
+            if not _authorized(self.headers, self.path, secret):
+                log.warning("Phone 401: path=%s auth-headers=%s", _redact(self.path, secret),
+                            [k for k in self.headers.keys()
+                             if k.lower() in ("authorization", "x-api-key", "api-key", "x-vapi-secret")] or "none")
                 return self._json(401, {"error": "unauthorized"})
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
