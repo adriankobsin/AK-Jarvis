@@ -24,6 +24,11 @@ done
 [[ $EUID -eq 0 ]] && { echo "Run this as your normal user, not root."; exit 1; }
 
 J="$HOME/.jarvis"; H="${HERMES_HOME:-$HOME/.hermes}"
+# `su - user` leaves no user session bus; point systemctl --user at the lingering one
+if [[ "$(uname -s)" == "Linux" && -z "${XDG_RUNTIME_DIR:-}" && -d "/run/user/$(id -u)" ]]; then
+  export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
 OS="$(uname -s)"
 say()  { printf '\n\033[1;36m▸ %s\033[0m\n' "$*"; }
 ok()   { printf '  \033[32m✓\033[0m %s\n' "$*"; }
