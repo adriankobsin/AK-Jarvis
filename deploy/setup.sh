@@ -143,7 +143,7 @@ UNIT
   loginctl enable-linger "$USER" 2>/dev/null || sudo loginctl enable-linger "$USER" || true
   systemctl --user restart jarvis.service
 fi
-for i in $(seq 1 30); do curl -fsS -o /dev/null "http://127.0.0.1:8788/manifest.webmanifest" && break; sleep 1; done
+for i in $(seq 1 30); do curl -fs -o /dev/null "http://127.0.0.1:8788/manifest.webmanifest" 2>/dev/null && break; sleep 1; done
 curl -fsS -o /dev/null "http://127.0.0.1:8788/manifest.webmanifest" && ok "Jarvis is running on port 8788" || warn "Jarvis didn't answer yet: check the logs (journalctl --user -u jarvis -n 50)"
 
 if [[ "$ROLE" == "site" ]]; then
@@ -193,7 +193,7 @@ hermes gateway restart >/dev/null 2>&1 || true
 hermes gateway status 2>/dev/null | head -3 || true
 
 # daily backup of Hermes + Jarvis at 03:15
-( crontab -l 2>/dev/null | grep -v akjarvis-backup; echo "15 3 * * * $REPO/deploy/backup.sh >/dev/null 2>&1 # akjarvis-backup" ) | crontab -
+{ { crontab -l 2>/dev/null || true; } | { grep -v akjarvis-backup || true; }; echo "15 3 * * * $REPO/deploy/backup.sh >/dev/null 2>&1 # akjarvis-backup"; } | crontab -
 ok "Nightly backup scheduled (keeps 14 days in ~/backups)"
 
 say "Done. Next steps"
