@@ -83,3 +83,16 @@ def test_starter_memory_fits_hermes_limits():
     assert len(user) <= 1375 * 0.7 and len(memory) <= 2200 * 0.7   # leave room to learn
     assert "§" in user and "§" in memory
     assert len((REPO / "hermes" / "SOUL.md").read_text().split()) < 2000
+
+
+def test_free_brains_chain_after_openai():
+    env = {"OPENAI_API_KEY": "o", "GROQ_API_KEY": "g", "GEMINI_API_KEY": "m", "GROQ_MODEL": "llama-x"}
+    cfg = hp.build_config("cloud", env, {}, "http://127.0.0.1:8788/mcp")
+    chain = cfg["fallback_providers"]
+    assert [c["base_url"] for c in chain] == ["https://api.openai.com/v1",
+                                              "https://generativelanguage.googleapis.com/v1beta/openai",
+                                              "https://api.groq.com/openai/v1"]
+    assert chain[2]["model"] == "llama-x" and chain[2]["key_env"] == "GROQ_API_KEY" and "label" not in chain[2]
+    assert cfg["auxiliary"]["web_extract"]["base_url"].startswith("https://generativelanguage")
+    assert cfg["auxiliary"]["compression"]["provider"] == "anthropic"     # private chat stays on Claude
+    assert "fallback_providers" not in hp.build_config("cloud", {}, {}, "http://x/mcp")

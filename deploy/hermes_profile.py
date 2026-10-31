@@ -30,6 +30,29 @@ FAST_MODEL = "claude-haiku-5-5"         # summaries, compression, web extraction
 VISION_MODEL = "claude-sonnet-5-5"
 GPT_TOOLS_MODEL = "gpt-5.5"             # GPT inside Hermes (chat-completions path, supports tools)
 
+# Free / free-tier brains, tried in this order after Claude (and OpenAI, if it has credit) fail —
+# e.g. out of credit, rate-limited or down. Each is used only when its key is in ~/.hermes/.env.
+# The model can be overridden per provider with <NAME>_MODEL in .env (free model lists change often).
+FREE_BRAINS = [
+    # (key env,            label,       OpenAI-compatible base URL,                                   default model)
+    ("GEMINI_API_KEY",     "Gemini",    "https://generativelanguage.googleapis.com/v1beta/openai",   "gemini-flash-latest"),
+    ("GROQ_API_KEY",       "Groq",      "https://api.groq.com/openai/v1",                            "openai/gpt-oss-120b"),
+    ("CEREBRAS_API_KEY",   "Cerebras",  "https://api.cerebras.ai/v1",                                "gpt-oss-120b"),
+    ("MISTRAL_API_KEY",    "Mistral",   "https://api.mistral.ai/v1",                                 "mistral-small-latest"),
+    ("OPENROUTER_API_KEY", "OpenRouter", "https://openrouter.ai/api/v1",                             "openrouter/free"),
+]
+
+
+def free_brains(env: dict) -> list[dict]:
+    """The free fallback endpoints that have a key, in order."""
+    out = []
+    for key, label, url, model in FREE_BRAINS:
+        if has(env, key):
+            m = env.get(key.replace("_API_KEY", "_MODEL")) or model
+            out.append({"provider": "custom", "model": m, "base_url": url, "key_env": key, "api_key_env": key,
+                        "label": label})
+    return out
+
 
 def read_env(path: Path) -> dict:
     env = {}
@@ -134,6 +157,14 @@ def build_config(role: str, env: dict, sites: dict[str, str], jarvis_url: str) -
         cfg["fallback_providers"] = [gpt_endpoint]
         cfg["delegation"] = {"model": GPT_TOOLS_MODEL, "base_url": "https://api.openai.com/v1",
                              "api_key": "${OPENAI_API_KEY}"}
+    free = free_brains(env)
+    if free:   # free brains keep Jarvis answering when paid credit runs low
+        chain = cfg.get("fallback_providers", []) + [{k: v for k, v in b.items() if k != "label"} for b in free]
+        cfg["fallback_providers"] = chain
+        gem = next((b for b in free if b["label"] == "Gemini"), None)
+        if gem:   # reading web pages (public content) on free Gemini instead of Claude saves daily tokens
+            cfg["auxiliary"]["web_extract"] = {"provider": "custom", "model": gem["model"], "base_url": gem["base_url"],
+                                               "api_key": "${GEMINI_API_KEY}"}
     if has(env, "ELEVENLABS_API_KEY"):
         cfg["tts"] = {"provider": "elevenlabs", "elevenlabs": {"voice_id": env.get("ELEVENLABS_VOICE_ID") or "onwK4e9ZLuTAKqWW03F9",
                                                                "model_id": "eleven_flash_v2_5"}}
