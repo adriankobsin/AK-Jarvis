@@ -64,6 +64,17 @@ CREATE TABLE IF NOT EXISTS phone_messages (
     name TEXT,
     message TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS journal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    kind TEXT NOT NULL,          -- conversation | decision | code_change | handoff | note
+    title TEXT NOT NULL,
+    body TEXT NOT NULL DEFAULT '',
+    project TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL DEFAULT '',   -- telegram, phone, core, voice, cli ...
+    model TEXT NOT NULL DEFAULT ''      -- which AI wrote it (claude-opus-5-5, gemini-flash, ...)
+);
+CREATE INDEX IF NOT EXISTS journal_project ON journal(project, id);
 CREATE TABLE IF NOT EXISTS log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts TEXT NOT NULL,
@@ -123,6 +134,20 @@ class Store:
             cols = [r[1] for r in self._db.execute("PRAGMA table_info(reminders)")]
             if "channel" not in cols:  # migration from v1.0/1.1
                 self._db.execute("ALTER TABLE reminders ADD COLUMN channel TEXT DEFAULT 'speak'")
+            try:  # full-text search over the shared journal (falls back to LIKE if FTS5 is missing)
+                self._db.executescript("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS journal_fts USING fts5(title, body, project,
+                    content='journal', content_rowid='id');
+                CREATE TRIGGER IF NOT EXISTS journal_ai AFTER INSERT ON journal BEGIN
+                    INSERT INTO journal_fts(rowid, title, body, project) VALUES (new.id, new.title, new.body, new.project);
+                END;
+                CREATE TRIGGER IF NOT EXISTS journal_ad AFTER DELETE ON journal BEGIN
+                    INSERT INTO journal_fts(journal_fts, rowid, title, body, project)
+                    VALUES ('delete', old.id, old.title, old.body, old.project);
+                END;""")
+                self._fts = True
+            except sqlite3.OperationalError:
+                self._fts = False
             self._db.commit()
 
     # -- helpers -----------------------------------------------------------
@@ -318,6 +343,39 @@ class Store:
         return self._all("SELECT * FROM phone_messages ORDER BY id DESC LIMIT ?", (limit,))
 
     # -- conversation log --------------------------------------------------
+    # -- shared journal: one memory every AI (Claude, GPT, Gemini, ...) reads and writes -----
+    def add_journal(self, kind: str, title: str, body: str = "", project: str = "",
+                    channel: str = "", model: str = "") -> int:
+        cur = self._exec("INSERT INTO journal(ts, kind, title, body, project, channel, model) VALUES (?,?,?,?,?,?,?)",
+                         (now().isoformat(timespec="seconds"), kind, title.strip(), body.strip(),
+                          project.strip().lower(), channel, model))
+        return cur.lastrowid
+
+    def search_journal(self, query: str = "", project: str = "", kind: str = "", limit: int = 15) -> list[dict]:
+        where, args = [], []
+        if project:
+            where.append("j.project=?"); args.append(project.strip().lower())
+        if kind:
+            where.append("j.kind=?"); args.append(kind)
+        q = (query or "").strip()
+        if q and self._fts:
+            terms = " OR ".join('"' + t.replace('"', "") + '"' for t in q.split() if t.strip())
+            sql = ("SELECT j.* FROM journal_fts f JOIN journal j ON j.id=f.rowid WHERE journal_fts MATCH ?"
+                   + "".join(" AND " + w for w in where) + " ORDER BY bm25(journal_fts), j.id DESC LIMIT ?")
+            return self._all(sql, (terms, *args, limit))
+        if q:
+            where.append("(j.title LIKE ? OR j.body LIKE ?)"); args += [f"%{q}%", f"%{q}%"]
+        sql = "SELECT j.* FROM journal j" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY j.id DESC LIMIT ?"
+        return self._all(sql, (*args, limit))
+
+    def journal_projects(self) -> list[dict]:
+        return self._all("SELECT project, COUNT(*) AS entries, MAX(ts) AS last FROM journal "
+                         "WHERE project<>'' GROUP BY project ORDER BY last DESC")
+
+    def search_log(self, query: str, limit: int = 10) -> list[dict]:
+        """Raw spoken/phone/core conversation lines containing the query."""
+        return self._all("SELECT * FROM log WHERE text LIKE ? ORDER BY id DESC LIMIT ?", (f"%{query}%", limit))
+
     def log(self, role: str, text: str) -> None:
         self._exec("INSERT INTO log(ts, role, text) VALUES (?,?,?)",
                    (now().isoformat(), role, text))

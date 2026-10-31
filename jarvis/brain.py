@@ -68,6 +68,9 @@ How you work:
 == What you know about {user} ({n_mem} memories in total; use recall to search all) ==
 {memories}
 
+== Shared journal: latest work by any model or channel (journal_search for more) ==
+{journal}
+
 == Procedures you have learned (get_procedure for full steps) ==
 {procedures}
 
@@ -255,6 +258,7 @@ class Brain:
             n_mem=self.store.count_memories(),
             memories="\n".join(f"- [{m['category']}] {m['content']}" for m in mems) or "- (nothing yet)",
             procedures="\n".join(f"- {p['name']}: {p['when_to_use']}" for p in procs[:60]) or "- (none yet)",
+            journal=self._journal_digest(),
             kb_summary=self._kb_summary(),
             recalled=self._auto_recall(user_text),
         )
@@ -282,6 +286,14 @@ class Brain:
             kb_summary=self._kb_summary(),
             recalled=self._auto_recall(user_text),
         )
+
+    def _journal_digest(self, n: int = 8) -> str:
+        try:
+            rows = self.store.search_journal("", limit=n)
+        except Exception:
+            return "- (not available)"
+        return "\n".join(f"- {r['ts'][:10]} {r['kind']}" + (f" [{r['project']}]" if r['project'] else "")
+                         + f": {r['title']}" for r in rows) or "- (empty)"
 
     def _kb_summary(self) -> str:
         if not self.kb:

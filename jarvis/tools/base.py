@@ -89,11 +89,11 @@ class ToolRegistry:
 
 def build_registry(config) -> ToolRegistry:
     """Assemble every tool module into one registry."""
-    from . import (browser, comms, devices, documents, expert, integrations, kids, knowledge, media,
+    from . import (browser, comms, devices, documents, expert, integrations, journal, kids, knowledge, media,
                    memory, programs, system, tasks, weather)
 
     reg = ToolRegistry()
-    for mod in (system, memory, knowledge, expert, tasks, weather, devices, kids, comms,
+    for mod in (system, memory, journal, knowledge, expert, tasks, weather, devices, kids, comms,
                 browser, documents, media, integrations, programs):
         mod.register(reg, config)
     from .openai_pair import openai_ready
