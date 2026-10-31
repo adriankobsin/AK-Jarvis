@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Backup brains for Jarvis (run as the jarvis user, from ~/AK-Jarvis).
 # When Claude can't answer (out of credit, rate-limited, down), Hermes falls through:
-#   OpenAI (if it has credit) → Gemini → Groq → Cerebras → Mistral → OpenRouter
+#   OpenAI (if it has credit) → Gemini → Groq → Cerebras → Mistral → NVIDIA → SambaNova → OpenRouter
 # Each free brain is used only if you've added its key. Keys stay on the server.
 #
 #   ./deploy/brains.sh add      paste the keys you have (Enter skips one), applies them, restarts Hermes
@@ -34,9 +34,11 @@ add)
   echo "  Groq       → console.groq.com/keys"
   echo "  Cerebras   → cloud.cerebras.ai  (API Keys)"
   echo "  Mistral    → console.mistral.ai/api-keys  (free 'Experiment' plan)"
+  echo "  NVIDIA     → build.nvidia.com  (join the free Developer Program, then 'Get API Key')"
+  echo "  SambaNova  → cloud.sambanova.ai  (API Keys)"
   echo "  OpenRouter → openrouter.ai/keys"
   echo
-  for pair in GEMINI_API_KEY:Gemini GROQ_API_KEY:Groq CEREBRAS_API_KEY:Cerebras MISTRAL_API_KEY:Mistral OPENROUTER_API_KEY:OpenRouter; do
+  for pair in GEMINI_API_KEY:Gemini GROQ_API_KEY:Groq CEREBRAS_API_KEY:Cerebras MISTRAL_API_KEY:Mistral NVIDIA_API_KEY:NVIDIA SAMBANOVA_API_KEY:SambaNova OPENROUTER_API_KEY:OpenRouter; do
     k="${pair%%:*}"; label="${pair##*:}"
     have=""; [[ -n "$(get_env "$k")" ]] && have=" (already set — Enter keeps it)"
     read -r -s -p "  $label key$have: " v; echo

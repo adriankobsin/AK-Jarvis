@@ -39,6 +39,8 @@ FREE_BRAINS = [
     ("GROQ_API_KEY",       "Groq",      "https://api.groq.com/openai/v1",                            "openai/gpt-oss-120b"),
     ("CEREBRAS_API_KEY",   "Cerebras",  "https://api.cerebras.ai/v1",                                "gpt-oss-120b"),
     ("MISTRAL_API_KEY",    "Mistral",   "https://api.mistral.ai/v1",                                 "mistral-small-latest"),
+    ("NVIDIA_API_KEY",     "NVIDIA",    "https://integrate.api.nvidia.com/v1",                       "meta/llama-3.3-70b-instruct"),
+    ("SAMBANOVA_API_KEY",  "SambaNova", "https://api.sambanova.ai/v1",                               "Meta-Llama-3.3-70B-Instruct"),
     ("OPENROUTER_API_KEY", "OpenRouter", "https://openrouter.ai/api/v1",                             "openrouter/free"),
 ]
 
