@@ -235,23 +235,65 @@ def main(argv: list[str], cfg) -> None:
     cmd = argv[0] if argv else "status"
     if cmd == "connect":
         url, state = x.connect_url()
-        print("\n1) Open this link on your laptop, sign in to Xero, tick ALL your Wave companies, click Allow:\n")
+        got: dict = {}
+        done = threading.Event()
+
+        def take(addr: str) -> None:
+            if "code=" in addr and not done.is_set():
+                got["addr"] = addr
+                done.set()
+
+        # Catch Xero's redirect automatically when the laptop forwards localhost:8765 here over SSH
+        # (ssh -L 8765:127.0.0.1:8765 …); pasting the address still works as a fallback.
+        from http.server import BaseHTTPRequestHandler, HTTPServer
+
+        class H(BaseHTTPRequestHandler):
+            def do_GET(self):  # noqa: N802
+                take("http://localhost:8765" + self.path)
+                ok = "code=" in self.path
+                msg = ("<h2>&#10003; Jarvis is connected to Xero.</h2><p>You can close this tab.</p>" if ok
+                       else "<h2>No code received.</h2><p>Go back to the terminal.</p>")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html")
+                self.end_headers()
+                self.wfile.write(msg.encode())
+
+            def log_message(self, *a):
+                pass
+
+        srv = None
+        try:
+            srv = HTTPServer(("127.0.0.1", 8765), H)
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+        except OSError:
+            pass
+
+        def ask() -> None:
+            while not done.is_set():
+                try:
+                    a = input("").strip()
+                except EOFError:
+                    return
+                if "code=" in a:
+                    take(a)
+                elif a:
+                    print("   ✗ That's missing '?code=…'. Paste the whole address, or just wait for the browser.")
+
+        print("\n1) On your laptop, open a NEW PowerShell window and run (root password), then leave it open:\n")
+        print("     ssh -N -L 8765:127.0.0.1:8765 root@2.29.3.208\n")
+        print("2) Open this link on the laptop, sign in to Xero, tick ALL your Wave companies, click Allow:\n")
         print("   " + url + "\n")
-        print("2) Your browser then shows 'This site can't be reached' — that's expected.")
-        print("   Copy the whole address from the address bar (starts http://localhost:8765/callback?code=)")
-        for attempt in range(3):
-            pasted = input("\n   Paste it here: ").strip()
-            if "code=" not in pasted:
-                print("   ✗ That's missing the '?code=…' part. Click once in the browser's address bar so the")
-                print("     whole address shows, select all (Ctrl+A), copy (Ctrl+C) and paste it here.")
-                continue
-            try:
-                comps = x.finish(pasted, state)
-                break
-            except XeroError as e:
-                raise SystemExit(f"   ✗ {e}\n     The code is single-use and expires in 5 minutes: run ./deploy/xero.sh connect again.")
-        else:
-            raise SystemExit("   No code received. Run ./deploy/xero.sh connect again.")
+        print("3) The browser should say 'Jarvis is connected to Xero' and this window continues by itself.")
+        print("   (No tunnel? Paste the whole http://localhost:8765/callback?code=… address here instead.)\n")
+        threading.Thread(target=ask, daemon=True).start()
+        if not done.wait(900):
+            raise SystemExit("   Timed out after 15 minutes. Run ./deploy/xero.sh connect again.")
+        if srv:
+            srv.shutdown()
+        try:
+            comps = x.finish(got["addr"], state)
+        except XeroError as e:
+            raise SystemExit(f"   ✗ {e}\n     The code is single-use and expires in 5 minutes: run ./deploy/xero.sh connect again.")
         print("\n✓ Xero connected. Companies Jarvis can see:")
         for c in comps:
             print("   • " + c["name"])
