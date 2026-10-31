@@ -239,8 +239,19 @@ def main(argv: list[str], cfg) -> None:
         print("   " + url + "\n")
         print("2) Your browser then shows 'This site can't be reached' — that's expected.")
         print("   Copy the whole address from the address bar (starts http://localhost:8765/callback?code=)")
-        pasted = input("\n   Paste it here: ")
-        comps = x.finish(pasted, state)
+        for attempt in range(3):
+            pasted = input("\n   Paste it here: ").strip()
+            if "code=" not in pasted:
+                print("   ✗ That's missing the '?code=…' part. Click once in the browser's address bar so the")
+                print("     whole address shows, select all (Ctrl+A), copy (Ctrl+C) and paste it here.")
+                continue
+            try:
+                comps = x.finish(pasted, state)
+                break
+            except XeroError as e:
+                raise SystemExit(f"   ✗ {e}\n     The code is single-use and expires in 5 minutes: run ./deploy/xero.sh connect again.")
+        else:
+            raise SystemExit("   No code received. Run ./deploy/xero.sh connect again.")
         print("\n✓ Xero connected. Companies Jarvis can see:")
         for c in comps:
             print("   • " + c["name"])
