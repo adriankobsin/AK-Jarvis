@@ -98,9 +98,11 @@ def mcp_servers(env: dict, sites: dict[str, str], jarvis_url: str) -> dict:
         },
         "xero": {
             "command": "npx", "args": ["-y", "@xeroapi/xero-mcp-server@latest"],
-            "env": {"XERO_CLIENT_ID": "${XERO_CLIENT_ID}", "XERO_CLIENT_SECRET": "${XERO_CLIENT_SECRET}"},
+            # Only for a UK/US/AU/NZ Xero *Custom Connection*. Normally Xero runs inside Jarvis instead
+            # (mcp_jarvis_xero_*: one sign-in, every Wave company) — see deploy/xero.sh.
+            "env": {"XERO_CLIENT_ID": "${XERO_CUSTOM_CLIENT_ID}", "XERO_CLIENT_SECRET": "${XERO_CUSTOM_CLIENT_SECRET}"},
             "tools": {"exclude": ["delete-*", "void-*"]},
-            "enabled": has(env, "XERO_CLIENT_ID", "XERO_CLIENT_SECRET"),
+            "enabled": has(env, "XERO_CUSTOM_CLIENT_ID", "XERO_CUSTOM_CLIENT_SECRET"),
         },
         "dataforseo": {
             "command": "npx", "args": ["-y", "dataforseo-mcp-server"],

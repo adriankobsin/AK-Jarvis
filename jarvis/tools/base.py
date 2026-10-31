@@ -90,11 +90,11 @@ class ToolRegistry:
 def build_registry(config) -> ToolRegistry:
     """Assemble every tool module into one registry."""
     from . import (browser, comms, devices, documents, expert, integrations, journal, kids, knowledge, media,
-                   memory, programs, system, tasks, weather)
+                   memory, programs, system, tasks, weather, xero_tools)
 
     reg = ToolRegistry()
     for mod in (system, memory, journal, knowledge, expert, tasks, weather, devices, kids, comms,
-                browser, documents, media, integrations, programs):
+                browser, documents, media, integrations, programs, xero_tools):
         mod.register(reg, config)
     from .openai_pair import openai_ready
     if openai_ready(config):   # Claude + GPT working together (needs OPENAI_API_KEY)

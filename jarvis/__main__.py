@@ -458,6 +458,12 @@ PHONE_SETUP = """
 """
 
 
+def cmd_xero(cfg, args) -> None:
+    from .xero import main as xero_main
+
+    xero_main([args.action], cfg)
+
+
 def cmd_doctor(cfg, args) -> None:
     from .config import find_config_file
 
@@ -583,6 +589,8 @@ def main(argv: list[str] | None = None) -> None:
     ph.add_argument("--number", help="Caller number (test) or number to ring (call)")
     ph.add_argument("--message", help="Opening line for `call`")
     sub.add_parser("mcp", help="Serve Jarvis's tools to Hermes/MCP clients over stdio")
+    xr = sub.add_parser("xero", help="Xero accounting: connect | status")
+    xr.add_argument("action", nargs="?", default="status", choices=["connect", "status"])
     sub.add_parser("doctor", help="Diagnose setup")
     sub.add_parser("init", help="Create config files in ~/.jarvis")
     args = p.parse_args(argv)
@@ -597,7 +605,7 @@ def main(argv: list[str] | None = None) -> None:
     {"chat": cmd_chat, "voice": cmd_voice, "ask": cmd_ask, "background": cmd_server,
      "server": cmd_server, "phone": cmd_phone, "web": cmd_web,
      "doctor": cmd_doctor, "init": cmd_init, "teach": cmd_teach, "learn": cmd_learn,
-     "backup": cmd_backup, "mcp": cmd_mcp}[cmd](cfg, args)
+     "backup": cmd_backup, "mcp": cmd_mcp, "xero": cmd_xero}[cmd](cfg, args)
 
 
 if __name__ == "__main__":
