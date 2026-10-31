@@ -14,7 +14,7 @@
 #>
 param(
   [switch]$Setup,
-  [string]$Server = "ubuntu-4gb-hel1-4.tail411b86.ts.net",
+  [string]$Server = "2.29.3.208"   # plain OpenSSH (Tailscale SSH would ignore the tunnel-only key limits),
   [int]$Port = 9222
 )
 $ErrorActionPreference = "Stop"
