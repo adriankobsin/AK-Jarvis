@@ -55,6 +55,7 @@ import sys, json, urllib.request, time
 sys.path.insert(0, "deploy")
 import hermes_profile as hp
 env = hp.read_env(__import__("pathlib").Path(sys.argv[1]))
+UA = "OpenAI/Python 1.0 (jarvis-brains-test)"  # Cloudflare-fronted APIs (Groq, Cerebras) block Python's default agent
 brains = []
 if env.get("ANTHROPIC_API_KEY"):
     brains.append(("Claude (main)", "anthropic", hp.MAIN_MODEL, env["ANTHROPIC_API_KEY"]))
@@ -71,15 +72,24 @@ for label, url, model, key in brains:
                 data=json.dumps({"model": model, "max_tokens": 10, "messages": [{"role": "user", "content": "Reply with just OK"}]}).encode(),
                 headers={"x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json"})
         else:
-            req = urllib.request.Request(url.rstrip("/") + "/chat/completions",
-                data=json.dumps({"model": model, "max_tokens": 200, "messages": [{"role": "user", "content": "Reply with just OK"}]}).encode(),
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+            body = {"model": model, "messages": [{"role": "user", "content": "Reply with just OK"}]}
+            body["max_completion_tokens" if "openai.com" in url else "max_tokens"] = 200
+            req = urllib.request.Request(url.rstrip("/") + "/chat/completions", data=json.dumps(body).encode(),
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": UA})
         with urllib.request.urlopen(req, timeout=40) as r:
             json.load(r)
         print(f"  \033[32m✓\033[0m {label:<18} {model:<28} {time.time()-t:4.1f}s")
     except urllib.error.HTTPError as e:
         msg = e.read().decode(errors="replace")[:160].replace("\n", " ")
         print(f"  \033[31m✗\033[0m {label:<18} {model:<28} HTTP {e.code}: {msg}")
+        if url != "anthropic" and e.code in (400, 404, 410) and "model" in msg.lower():
+            try:  # show models this key can use, so a current one can be picked
+                r = urllib.request.urlopen(urllib.request.Request(url.rstrip("/") + "/models",
+                    headers={"Authorization": f"Bearer {key}", "User-Agent": UA}), timeout=20)
+                ids = sorted(m.get("id", "") for m in json.load(r).get("data", []))
+                print("      available: " + ", ".join(ids[:25]) + (" …" if len(ids) > 25 else ""))
+            except Exception:
+                pass
     except Exception as e:
         print(f"  \033[31m✗\033[0m {label:<18} {model:<28} {str(e)[:120]}")
 print("\n✗ on a free brain with 'model' in the message: set a current model, e.g.  echo GROQ_MODEL=<name> >> ~/.hermes/.env")
