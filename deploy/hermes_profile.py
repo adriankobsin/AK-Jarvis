@@ -159,7 +159,10 @@ def install(hermes_home: Path, role: str, sites: dict[str, str], jarvis_url: str
     env = {**read_env(hermes_home / ".env"), **{k: v for k, v in os.environ.items() if k.isupper()}}
     cfg_path = hermes_home / "config.yaml"
     current = yaml.safe_load(cfg_path.read_text()) if cfg_path.exists() else {}
-    merged = deep_merge(current or {}, build_config(role, env, sites, jarvis_url))
+    new_cfg = build_config(role, env, sites, jarvis_url)
+    if ((current or {}).get("tts") or {}).get("provider"):
+        new_cfg.pop("tts", None)  # keep the voice Adrian chose (e.g. switched to the free Microsoft/Edge voice)
+    merged = deep_merge(current or {}, new_cfg)
     report = {"enabled": sorted(n for n, s in merged["mcp_servers"].items() if s.get("enabled", True)),
               "disabled": sorted(n for n, s in merged["mcp_servers"].items() if not s.get("enabled", True))}
     if dry_run:
